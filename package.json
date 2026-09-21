@@ -1,0 +1,35 @@
+{
+  "name": "momo-confusables",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "npm run test:similarity && npm run test:notepad && npm run test:worker && npm run test:input",
+    "test:similarity": "node scripts/test-similarity.mjs",
+    "test:notepad": "node scripts/test-notepad.mjs",
+    "test:worker": "node scripts/test-worker.mjs",
+    "test:input": "node scripts/test-input.mjs",
+    "test:e2e": "cross-env PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers playwright test",
+    "typecheck": "tsc -b && tsc -p tsconfig.worker.json",
+    "build": "python p0/build_dictionary_shards.py && python p0/build_dictionary_modules.py && npm run typecheck && vite build",
+    "preview": "wrangler dev",
+    "deploy:preview": "npm run build && wrangler deploy --env preview",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^6.3.289",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260921.1",
+    "@playwright/test": "^1.63.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "wrangler": "^4.32.0"
+  }
+}

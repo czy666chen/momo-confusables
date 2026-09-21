@@ -1,0 +1,9 @@
+{
+  "name": "momo-confusables",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-17",
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/api/*", "/dictionary/*"] },
+  "durable_objects": { "bindings": [{ "name": "SESSIONS", "class_name": "Session" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Session"] }],
+  "env": { "preview": { "name": "momo-confusables-preview", "durable_objects": { "bindings": [{ "name": "SESSIONS", "class_name": "Session" }] } } }
+}

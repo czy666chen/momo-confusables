@@ -1,0 +1,302 @@
+/* 设计令牌：颜色/圆角集中在此，暗色主题只覆盖变量，组件规则不再各自写死色值 */
+:root {
+  --bg: #f7f8f4;
+  --fg: #172820;
+  --panel: #fff;
+  --panel-input: #fff;
+  --primary: #315e49;
+  --primary-hover: #254b39;
+  --ghost-fg: #315e49;
+  --ghost-border: #bdcbc2;
+  --ghost-hover: #e7eee8;
+  --border: #dae4dc;
+  --divider: #eef1ed;
+  --control-border: #b9c8bd;
+  --dashed-border: #bdccc0;
+  --text-muted: #617167;
+  --text-soft: #526257;
+  --text-meta: #66756b;
+  --label: #445c4b;
+  --eyebrow: #547863;
+  --amber: #956421;
+  --focus: #92bd9e;
+  --status-dot: #a2aaa4;
+  --status-online: #3b9363;
+  --notice-bg: #e8f0ea;
+  --notice-fg: #28593d;
+  --warning-bg: #fff2d9;
+  --warning-fg: #714e17;
+  --error-bg: #ffebe6;
+  --error-fg: #9b3526;
+  --radius-control: 8px;
+  --radius-panel: 10px;
+  --radius-pill: 99px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #142019;
+    --fg: #e2ede3;
+    --panel: #1d2c22;
+    --panel-input: #17261d;
+    --ghost-fg: #b2d9b9;
+    --ghost-border: #536e59;
+    --ghost-hover: #304634;
+    --border: #34483a;
+    --divider: #34483a;
+    --control-border: #536a58;
+    --dashed-border: #34483a;
+    --text-muted: #adbbaf;
+    --text-soft: #adbbaf;
+    --text-meta: #8ba08f;
+    --label: #b2d9b9;
+    --eyebrow: #8fb39b;
+    --amber: #d8ab63;
+  }
+}
+
+* { box-sizing: border-box }
+body { margin: 0 }
+button, input { font: inherit }
+button { border: 1px solid var(--primary); background: var(--primary); color: #fff; border-radius: var(--radius-control); padding: 11px 17px; cursor: pointer; font-weight: 650 }
+button:hover:not(:disabled) { background: var(--primary-hover) }
+button:disabled { opacity: .55; cursor: not-allowed }
+.ghost { color: var(--ghost-fg); background: transparent; border-color: var(--ghost-border) }
+.ghost:hover:not(:disabled) { background: var(--ghost-hover) }
+input { width: 100%; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--panel-input); color: inherit; padding: 11px 12px }
+input[type=checkbox] { width: auto; margin: 0; accent-color: var(--primary); padding: 0 }
+input:focus, button:focus-visible, textarea:focus, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px }
+
+/* 面板公共外观：原先 metrics/records/connectPanel 等各自重复声明同一组 背景+边框+圆角 */
+.metrics, .records, .connectPanel, .supplement, .selectedPanel, .submitPanel, .guideSteps, .guideHelp { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-panel) }
+.wordList, .pairList, .manualList, .selectedList, .submitPreview, .submitOutcomes { list-style: none; padding: 0; margin: 0 }
+
+:root { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color-scheme: light dark; color: var(--fg); background: var(--bg); font-synthesis: none }
+.shell { max-width: 1160px; margin: 0 auto; padding: 0 28px; min-height: 100vh; display: flex; flex-direction: column }
+.shell > main, .shell > footer { min-width: 0 }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 36px 0 31px; border-bottom: 1px solid var(--border) }
+.eyebrow { font-size: 11px; letter-spacing: .15em; font-weight: 800; color: var(--eyebrow) }
+.top h1 { font-size: 32px; letter-spacing: -.045em; margin: 5px 0 3px }
+.top p, .toolbar p { margin: 0; color: var(--text-muted); font-size: 14px }
+.topActions { display: flex; align-items: center; gap: 13px }
+.navLink, .primaryLink { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-control); font-weight: 650; text-decoration: none }
+.navLink { color: var(--ghost-fg); border: 1px solid var(--ghost-border); padding: 9px 13px; font-size: 13px }
+.navLink:hover { background: var(--ghost-hover) }
+.primaryLink { width: fit-content; background: var(--primary); color: #fff; border: 1px solid var(--primary); padding: 10px 16px; margin-top: 4px }
+.primaryLink:hover { background: var(--primary-hover) }
+.status { font-size: 13px; color: var(--text-meta) }
+.status:before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--status-dot); margin-right: 7px }
+.status.online:before { background: var(--status-online) }
+
+.connectPanel { max-width: 520px; margin: 58px auto 0; width: 100%; padding: 34px }
+.connectPanel h2 { margin: 0 0 9px }
+.connectPanel p { color: var(--text-soft); line-height: 1.65 }
+.connectPanel a, .connectPanel a:visited { color: inherit; text-decoration: underline; text-underline-offset: .14em }
+.connectPanel form { display: grid; gap: 10px; margin-top: 26px }
+.connectPanel button { margin-top: 8px }
+
+.apiGuide { padding: 46px 0 54px }
+.guideIntro { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(240px, .8fr); gap: 56px; align-items: end; margin-bottom: 34px }
+.guideIntro h2 { margin: 7px 0 13px; max-width: 680px; font-size: clamp(32px, 5vw, 54px); line-height: 1.02; letter-spacing: -.055em }
+.guideIntro p { max-width: 650px; margin: 0; color: var(--text-soft); font-size: 16px; line-height: 1.75 }
+.guideIntro aside { display: grid; gap: 7px; border-left: 3px solid var(--primary); padding: 4px 0 4px 18px }
+.guideIntro aside strong { font-size: 14px }
+.guideIntro aside span { color: var(--text-muted); font-size: 13px; line-height: 1.65 }
+.guideSteps { list-style: none; padding: 0; margin: 0; overflow: hidden }
+.guideSteps > li { padding: 27px 30px; border-bottom: 1px solid var(--divider) }
+.guideSteps > li:last-child { border-bottom: 0 }
+.guideSteps h3, .guideHelp h3 { margin: 0 0 8px; font-size: 19px; letter-spacing: -.015em }
+.guideSteps p, .guideHelp p { margin: 0 0 14px; max-width: 680px; color: var(--text-soft); font-size: 14px; line-height: 1.7 }
+.pathLine { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 13px }
+.pathLine span, .tokenExample { border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--bg) }
+.pathLine span { padding: 7px 11px; font-size: 13px; font-weight: 700 }
+.pathLine i { color: var(--text-meta); font-style: normal }
+.tokenExample { display: flex; justify-content: space-between; align-items: center; gap: 18px; max-width: 460px; padding: 12px 14px; color: var(--text-meta); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; overflow: hidden }
+.tokenExample span { overflow: hidden; letter-spacing: .08em }
+.tokenExample em { flex-shrink: 0; color: var(--label); font: 700 12px ui-sans-serif, system-ui, sans-serif }
+.guideHelp { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 22px; overflow: hidden }
+.guideHelp > div { padding: 25px 30px }
+.guideHelp > div + div { border-left: 1px solid var(--divider) }
+.guideHelp a { color: var(--ghost-fg); font-size: 13px; font-weight: 700; text-underline-offset: .18em }
+
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin: 31px 0 23px }
+.toolbar h2, .recordsHead h2 { margin: 4px 0 6px; font-size: 22px; letter-spacing: -.025em }
+.recordsHead label, .connectPanel label, .controls label, .submitFields > label, .submitTargets { font-size: 13px; font-weight: 700; color: var(--label) }
+
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); overflow: hidden }
+.metrics div { padding: 21px 23px; border-right: 1px solid var(--divider) }
+.metrics div:last-child { border: 0 }
+.metrics span { display: block; color: var(--text-muted); font-size: 12px; margin-bottom: 9px }
+.metrics strong { display: block; font-size: 24px; letter-spacing: -.025em }
+.metrics .date { font-size: 15px; letter-spacing: 0; padding-top: 7px }
+
+.notice, .warning, .error { border-radius: var(--radius-control); padding: 13px 16px; margin: 16px 0; line-height: 1.6 }
+.notice { background: var(--notice-bg); color: var(--notice-fg) }
+.warning { background: var(--warning-bg); color: var(--warning-fg) }
+.error { background: var(--error-bg); color: var(--error-fg) }
+
+.syncProgress { background: var(--notice-bg); color: var(--notice-fg); border-radius: var(--radius-control); padding: 14px 16px 16px; margin: 16px 0 }
+.syncProgressLabel { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 9px; font-size: 14px; font-variant-numeric: tabular-nums }
+.syncProgressLabel strong { font-size: 12px }
+.syncProgress progress { display: block; width: 100%; height: 8px; border: 0; border-radius: var(--radius-pill); overflow: hidden; appearance: none; background: color-mix(in srgb, var(--primary) 14%, transparent) }
+.syncProgress progress::-webkit-progress-bar { background: color-mix(in srgb, var(--primary) 14%, transparent); border-radius: var(--radius-pill) }
+.syncProgress progress::-webkit-progress-value { background: var(--primary); border-radius: var(--radius-pill); transition: width .25s ease }
+.syncProgress progress::-moz-progress-bar { background: var(--primary); border-radius: var(--radius-pill) }
+
+.records { margin: 29px 0 50px; overflow: hidden }
+.recordsHead { display: flex; justify-content: space-between; align-items: center; padding: 22px 24px; border-bottom: 1px solid var(--divider); gap: 20px }
+.recordsHead label { min-width: 240px }
+.recordsHead input { display: block; margin-top: 6px }
+
+.wordList li { display: flex; justify-content: space-between; gap: 25px; align-items: center; padding: 17px 24px; border-bottom: 1px solid var(--divider) }
+.word { display: grid; grid-template-columns: minmax(130px, 190px) 1fr; gap: 20px; align-items: baseline; min-width: 0; flex: 1 }
+.word strong { font-size: 17px; overflow-wrap: anywhere }
+.word span { color: var(--text-soft); font-size: 14px; line-height: 1.55; white-space: pre-line }
+.meaningForm { display: block }
+.meaningForm label { display: block; color: var(--amber); font-size: 12px; margin-bottom: 6px }
+.meaningForm div { display: flex; gap: 6px }
+.meaningForm input { min-width: 0; padding: 7px 9px; font-size: 13px }
+.meaningForm button { padding: 6px 10px; font-size: 12px }
+.meta { display: flex; gap: 14px; color: var(--text-meta); font-size: 12px; white-space: nowrap }
+
+.empty { padding: 36px 24px; color: var(--text-meta); text-align: center }
+.empty.large { background: var(--panel); border: 1px dashed var(--dashed-border); border-radius: var(--radius-panel); margin: 24px 0 }
+
+.pager { display: flex; justify-content: space-between; align-items: center; padding: 15px 24px; color: var(--text-meta); font-size: 13px }
+.pagerInfo, .pagerActions, .pagerJump { display: flex; align-items: center }
+.pagerInfo { gap: 5px }
+.pagerJump { gap: 6px }
+.pagerJump input { width: 54px; padding: 7px 8px; text-align: center; color: var(--fg); font-variant-numeric: tabular-nums }
+.pagerActions { gap: 8px }
+.pager button { padding: 8px 11px }
+
+footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 12px; border-top: 1px solid var(--border); overflow-wrap: anywhere }
+
+.supplement { padding: 20px 22px; margin: 16px 0 0 }
+.supplement h3 { margin: 0 0 5px; font-size: 16px }
+.supplement p { margin: 0 0 14px; font-size: 13px; color: var(--text-muted); line-height: 1.6 }
+.supplement textarea { display: block; width: 100%; resize: vertical; margin-bottom: 10px; padding: 10px 12px; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--panel-input); color: inherit; font: inherit }
+.supplement .fileLabel { display: block; margin-bottom: 12px; font-size: 12px; font-weight: 700; color: var(--text-soft) }
+.supplement input[type=file] { display: block; margin-top: 6px; font-size: 12px }
+.records > .supplement { margin: 20px 24px; background: var(--bg) }
+
+.tabs { display: flex; gap: 8px; margin: 26px 0 0; border-bottom: 1px solid var(--border) }
+.tab { border: 1px solid transparent; border-bottom: 0; background: transparent; color: var(--text-soft); border-radius: var(--radius-control) var(--radius-control) 0 0; padding: 10px 16px; font-weight: 650; font-size: 14px }
+.tab:hover:not(:disabled) { background: var(--ghost-hover); color: var(--ghost-fg) }
+.tab.active { background: var(--panel); border-color: var(--border); color: var(--fg) }
+
+.workspace { display: flex; gap: 22px; align-items: flex-start }
+.workspace .records.discover { flex: 1; min-width: 0 }
+.records.discover .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; padding: 20px 24px; border-bottom: 1px solid var(--divider) }
+.records.discover .controls label { display: grid; gap: 6px; min-width: 180px }
+.records.discover .controls .thresholdControl { min-width: 260px }
+.thresholdSlider { display: flex; align-items: center; gap: 12px }
+.records.discover .controls input[type=range] { width: 190px; height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--primary); cursor: pointer }
+.records.discover .controls input[type=range]:disabled { cursor: not-allowed }
+.thresholdSlider output { min-width: 46px; color: var(--fg); font-variant-numeric: tabular-nums; text-align: right }
+.controlActions { display: flex; gap: 8px; align-items: flex-end }
+.controlActions button { padding: 10px 16px; font-size: 14px }
+
+.scopeLine { margin: 0; padding: 13px 24px; font-size: 13px; color: var(--text-soft); line-height: 1.7; border-bottom: 1px solid var(--divider) }
+.scopeLine strong { font-size: 15px }
+
+.pairList li { padding: 15px 24px; border-bottom: 1px solid var(--divider) }
+.pairActions { display: flex; align-items: center; gap: 10px; margin-bottom: 9px }
+.pairActions label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-meta) }
+.simScore { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--notice-fg); background: var(--notice-bg); border-radius: var(--radius-pill); padding: 3px 10px; white-space: nowrap }
+.phoneticScore { font-size: 12px; color: var(--text-meta); border: 1px solid var(--control-border); border-radius: var(--radius-pill); padding: 3px 9px; white-space: nowrap; cursor: help }
+.phoneticScore.match { color: var(--notice-fg); background: var(--notice-bg); border-color: transparent }
+.pairWords { display: grid; grid-template-columns: 1fr 1fr; gap: 14px }
+.pairSide { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: baseline; min-width: 0 }
+.pairPick { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1 }
+.pairPick strong { font-size: 16px; overflow-wrap: anywhere }
+.pairMeaning { grid-column: 1 / -1; color: var(--text-soft); font-size: 14px; line-height: 1.55 }
+.pairMeta { grid-column: 1 / -1; color: var(--text-meta); font-size: 12px }
+
+.selectedPanel { width: 300px; flex-shrink: 0; padding: 20px 18px; position: sticky; top: 20px }
+.selectedPanel h2 { margin: 0 0 8px; font-size: 17px }
+.selectedPanel > p { margin: 0 0 12px; font-size: 12px; color: var(--text-muted); line-height: 1.6 }
+.selectedList { margin: 0 0 12px }
+.selectedList li { display: grid; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--divider) }
+.selectedList strong { font-size: 14px }
+.selectedList span { font-size: 12px; color: var(--text-soft); line-height: 1.5 }
+.selectedList button { justify-self: start; padding: 4px 8px; font-size: 11px }
+
+.records.manual .manualQueryLabel { flex: 1; min-width: 280px }
+.records.manual textarea { display: block; width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--panel-input); color: inherit; font: inherit }
+.manualList li { display: grid; gap: 5px; padding: 15px 24px; border-bottom: 1px solid var(--divider) }
+.hitMain { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.hitPick { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.hitPick strong { font-size: 16px; overflow-wrap: anywhere }
+.hitQuery { font-size: 12px; color: var(--text-meta) }
+.hitQuery summary { cursor: pointer; font-size: 12px; color: var(--text-meta) }
+.hitQuery span { display: block; margin-top: 3px }
+.hitMeta { display: flex; gap: 14px; color: var(--text-meta); font-size: 12px }
+
+.hint { display: block; font-size: 12px; font-weight: 400; color: var(--text-meta); margin: 4px 0 0; line-height: 1.6 }
+
+.submitPanel { margin: 20px 0 0; padding: 20px 24px; display: grid; gap: 14px }
+.submitHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px }
+.submitHead h2 { margin: 4px 0 0; font-size: 20px }
+.submitHead button { padding: 7px 12px; font-size: 13px }
+.submitTargets { display: flex; gap: 22px; font-size: 14px }
+.submitTargets label { display: flex; align-items: center; gap: 8px }
+.submitFields { display: grid; gap: 10px }
+.submitFields > label { display: grid; gap: 5px }
+.submitFields select { padding: 10px 12px; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--panel-input); color: inherit; font: inherit }
+.submitPreview { border: 1px solid var(--divider); border-radius: var(--radius-control) }
+.submitPreview li { display: flex; align-items: baseline; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--divider); flex-wrap: wrap }
+.submitPreview li:last-child { border-bottom: 0 }
+.submitPreview strong { min-width: 130px; font-size: 15px; overflow-wrap: anywhere }
+.submitPreview span { flex: 1; min-width: 200px; color: var(--text-soft); font-size: 13px; line-height: 1.55 }
+.pairMeaning, .selectedList span, .submitPreview span { white-space: pre-line }
+.submitPreview em { font-style: normal; font-size: 12px; color: var(--text-meta); border: 1px solid var(--ghost-border); border-radius: var(--radius-pill); padding: 2px 9px; white-space: nowrap }
+.submitMeanings { display: grid; gap: 8px }
+.submitMeanings > p { margin: 0 }
+.submitOutcomes { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); display: grid; gap: 6px }
+.submitOutcomes li { display: flex; align-items: baseline; gap: 8px; border: 1px solid var(--divider); border-radius: var(--radius-control); padding: 7px 10px }
+.submitOutcomes strong { font-size: 14px; overflow-wrap: anywhere }
+.submitOutcomes em { font-style: normal; margin-left: auto; font-size: 12px; color: var(--text-meta); white-space: nowrap }
+.submitActions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
+
+@media (max-width: 760px) {
+  button, .navLink, .primaryLink { min-height: 44px }
+  .shell { padding: 0 16px }
+  .top { padding: 22px 0 }
+  .top h1 { font-size: 26px }
+  .top p { display: none }
+  .topActions { flex-direction: column; align-items: flex-end; gap: 7px }
+  .topActions button { padding: 7px 9px; font-size: 12px }
+  .navLink { padding: 7px 9px; font-size: 12px; white-space: nowrap }
+  .apiGuide { padding-top: 30px }
+  .guideIntro { grid-template-columns: 1fr; gap: 22px }
+  .guideIntro h2 { font-size: 36px }
+  .guideSteps > li { padding: 23px 18px }
+  .guideHelp { grid-template-columns: 1fr }
+  .guideHelp > div { padding: 23px 20px }
+  .guideHelp > div + div { border-left: 0; border-top: 1px solid var(--divider) }
+  .toolbar { align-items: flex-start }
+  .toolbar button { white-space: nowrap }
+  .metrics { grid-template-columns: repeat(2, 1fr) }
+  .metrics div:nth-child(2) { border-right: 0 }
+  .metrics div:nth-child(-n+2) { border-bottom: 1px solid var(--divider) }
+  .recordsHead { align-items: stretch; flex-direction: column }
+  .recordsHead label { min-width: 0 }
+  .wordList li { align-items: flex-start }
+  .word { display: block }
+  .word span { display: block; margin-top: 5px }
+  .meta { display: grid; gap: 5px; text-align: right }
+  .pager { gap: 12px; flex-wrap: wrap }
+  .pagerInfo { flex-wrap: wrap }
+  .records > .supplement { margin: 16px }
+  .pairWords { grid-template-columns: 1fr }
+  .pairActions { flex-wrap: wrap }
+  .simScore { margin-left: 0 }
+  .hitMain { align-items: flex-start; flex-direction: column; gap: 5px }
+  .submitPreview span { min-width: 0; flex-basis: 100% }
+  .submitPreview em { margin-left: auto }
+  .submitTargets { flex-direction: column; gap: 10px }
+}
+@media (max-width: 860px) {
+  .workspace { flex-direction: column }
+  .selectedPanel { width: auto; position: static }
+}
