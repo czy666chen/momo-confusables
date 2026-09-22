@@ -1,0 +1,102 @@
+{
+  "environment": {
+    "node": "v26.2.0",
+    "platform": "win32",
+    "cpu": "13th Gen Intel(R) Core(TM) i5-13500H"
+  },
+  "snapshot": {
+    "rows": 7140,
+    "total": 7154,
+    "finished": false,
+    "weak": 277
+  },
+  "resources": {
+    "dictionaryBytes": 5487527,
+    "dictionaryGzipBytes": 1085365,
+    "predictionFilesUsed": 1
+  },
+  "results": [
+    {
+      "name": "actual-weak",
+      "count": 277,
+      "budgetMs": 5000,
+      "runs": [
+        {
+          "wallMs": 87,
+          "cpuMs": 171,
+          "comparisons": 38226,
+          "results": 52
+        },
+        {
+          "wallMs": 75,
+          "cpuMs": 110,
+          "comparisons": 38226,
+          "results": 52
+        },
+        {
+          "wallMs": 72,
+          "cpuMs": 63,
+          "comparisons": 38226,
+          "results": 52
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "actual-1000",
+      "count": 1000,
+      "budgetMs": 5000,
+      "runs": [
+        {
+          "wallMs": 1101,
+          "cpuMs": 1125,
+          "comparisons": 499500,
+          "results": 451
+        },
+        {
+          "wallMs": 1105,
+          "cpuMs": 1077,
+          "comparisons": 499500,
+          "results": 451
+        },
+        {
+          "wallMs": 1078,
+          "cpuMs": 1063,
+          "comparisons": 499500,
+          "results": 451
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "actual-manual-20",
+      "count": 7140,
+      "budgetMs": 3000,
+      "runs": [
+        {
+          "wallMs": 317,
+          "cpuMs": 328,
+          "comparisons": 142800,
+          "results": 7140
+        },
+        {
+          "wallMs": 316,
+          "cpuMs": 344,
+          "comparisons": 142800,
+          "results": 7140
+        },
+        {
+          "wallMs": 313,
+          "cpuMs": 297,
+          "comparisons": 142800,
+          "results": 7140
+        }
+      ],
+      "passed": true
+    }
+  ],
+  "cloudflare": {
+    "measured": false,
+    "reason": "Local-only acceptance; no production traffic or account analytics queried."
+  }
+}

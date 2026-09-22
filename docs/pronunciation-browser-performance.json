@@ -1,0 +1,85 @@
+{
+  "browser": "153.0.8010.12",
+  "baseURL": "http://localhost:8787",
+  "scope": "Production Web Worker, dictionary only, includes fetch/parse/message transfer; first run cold then browser HTTP cache; local loopback network",
+  "results": [
+    {
+      "name": "actual-weak",
+      "rows": 277,
+      "budgetMs": 5000,
+      "runs": [
+        {
+          "wallMs": 543,
+          "maxMainThreadGapMs": 28,
+          "comparisons": 38226,
+          "results": 52
+        },
+        {
+          "wallMs": 451,
+          "maxMainThreadGapMs": 16,
+          "comparisons": 38226,
+          "results": 52
+        },
+        {
+          "wallMs": 367,
+          "maxMainThreadGapMs": 17,
+          "comparisons": 38226,
+          "results": 52
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "actual-1000",
+      "rows": 1000,
+      "budgetMs": 5000,
+      "runs": [
+        {
+          "wallMs": 1356,
+          "maxMainThreadGapMs": 17,
+          "comparisons": 499500,
+          "results": 450
+        },
+        {
+          "wallMs": 1258,
+          "maxMainThreadGapMs": 17,
+          "comparisons": 499500,
+          "results": 450
+        },
+        {
+          "wallMs": 1316,
+          "maxMainThreadGapMs": 17,
+          "comparisons": 499500,
+          "results": 450
+        }
+      ],
+      "passed": true
+    },
+    {
+      "name": "actual-manual-20",
+      "rows": 7140,
+      "budgetMs": 3000,
+      "runs": [
+        {
+          "wallMs": 666,
+          "maxMainThreadGapMs": 17,
+          "comparisons": 142800,
+          "results": 7140
+        },
+        {
+          "wallMs": 587,
+          "maxMainThreadGapMs": 25,
+          "comparisons": 142800,
+          "results": 7140
+        },
+        {
+          "wallMs": 603,
+          "maxMainThreadGapMs": 17,
+          "comparisons": 142800,
+          "results": 7140
+        }
+      ],
+      "passed": true
+    }
+  ]
+}

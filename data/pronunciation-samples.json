@@ -1,0 +1,16 @@
+[
+  { "category": "homophone", "left": "flower", "right": "flour", "expectation": "同音且拼写差异明显" },
+  { "category": "homophone", "left": "sea", "right": "see", "expectation": "同音短词" },
+  { "category": "homophone", "left": "night", "right": "knight", "expectation": "静音字母造成拼写差异" },
+  { "category": "near-pronunciation", "left": "ship", "right": "sheep", "expectation": "元音不同的近音词" },
+  { "category": "near-pronunciation", "left": "adapt", "right": "adopt", "expectation": "拼写和读音都接近" },
+  { "category": "spelling-only", "left": "cough", "right": "though", "expectation": "拼写相近但读音不同" },
+  { "category": "spelling-only", "left": "quiet", "right": "quite", "expectation": "现有 OSA 距离为 1，读音不应视为同音" },
+  { "category": "multiple-pronunciations", "left": "read", "right": "red", "expectation": "read 的过去式读音可命中 red" },
+  { "category": "multiple-pronunciations", "left": "lead", "right": "led", "expectation": "lead 的名词读音可命中 led" },
+  { "category": "multiple-pronunciations", "left": "wind", "right": "wined", "expectation": "必须比较全部读音变体，不能只取第一项" },
+  { "category": "out-of-vocabulary", "left": "OpenAI", "right": null, "expectation": "词典外词应报告暂无读音，不能按零分处理" },
+  { "category": "out-of-vocabulary", "left": "Maimemo", "right": null, "expectation": "品牌名用于验证后续 G2P 缺失路径" },
+  { "category": "reorder-regression", "left": "turnover", "right": "overturn", "expectation": "现有完整词块换序必须保持命中" },
+  { "category": "reorder-negative", "left": "abcdef", "right": "cdefab", "expectation": "两字符块小于下限 3，不属于现有换序" }
+]

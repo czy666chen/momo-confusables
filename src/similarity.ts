@@ -1,6 +1,20 @@
 // 拼写相似度：受限 Damerau–Levenshtein（Optimal String Alignment）。
 // 长度与距离统一使用 Unicode 码点单位（Array.from），不混用 UTF-16 长度。
 
+import { DEFAULT_PRONUNCIATION_THRESHOLD, comparePronunciations, normalizePronunciationKey, type PronunciationDictionary, type PronunciationMatch } from './pronunciation.ts'
+
+export const MATCH_TYPES = ['spelling', 'reorder', 'pronunciation'] as const
+export type MatchType = typeof MATCH_TYPES[number]
+export const DEFAULT_MATCH_TYPES: MatchType[] = [...MATCH_TYPES]
+
+export function normalizeMatchTypes(value: unknown): MatchType[] {
+  if (value === undefined) return [...DEFAULT_MATCH_TYPES]
+  if (!Array.isArray(value) || value.length === 0) throw new Error('至少选择一种匹配类型')
+  const allowed = new Set<string>(MATCH_TYPES)
+  if (value.some(item => typeof item !== 'string' || !allowed.has(item))) throw new Error('matchTypes 包含无效类型')
+  return MATCH_TYPES.filter(type => value.includes(type))
+}
+
 export type SimWord = {
   id: string
   spelling: string
@@ -300,4 +314,162 @@ export function manualFind(candidates: SimWord[], queries: SimWord[], onProgress
     matchType: e.matchType,
   }))
   return { hits, comparisons: done, total }
+}
+
+export type SpellingMatch = { distance: number; similarity: number }
+export type CombinedPair = {
+  aId: string
+  bId: string
+  aSpelling: string
+  bSpelling: string
+  matchTypes: MatchType[]
+  spellingMatch?: SpellingMatch
+  pronunciation?: PronunciationMatch | null
+}
+
+export type CombinedManualHit = {
+  id: string
+  spelling: string
+  bestQuery: string
+  tiedQueries: string[]
+  matchTypes: MatchType[]
+  spellingMatch?: SpellingMatch & { bestQuery: string; tiedQueries: string[] }
+  pronunciation?: (PronunciationMatch & { bestQuery: string; tiedQueries: string[] }) | null
+}
+
+export type CombinedDiscoveryResult = { pairs: CombinedPair[]; before: number; comparisons: number; qualified: number }
+export type CombinedManualResult = { hits: CombinedManualHit[]; comparisons: number; total: number }
+
+type RankedPair = { pair: CombinedPair; category: number; rank: number; aNorm: string; bNorm: string }
+
+function scoreQualifies(score: number, p: number, r: number): boolean {
+  return score * r + Number.EPSILON >= p
+}
+
+// 三条召回路径在同一个 Worker 内独立执行；未选择的路径不读取数据也不计算。
+export function autoDiscoverMatches(words: SimWord[], p: number, r: number, matchTypesValue: unknown, pronunciations?: PronunciationDictionary, onProgress?: (done: number, total: number) => void): CombinedDiscoveryResult {
+  const matchTypes = normalizeMatchTypes(matchTypesValue)
+  const enabled = new Set(matchTypes)
+  const valid = words.filter(word => word.cp.length > 0)
+  const before = (valid.length * (valid.length - 1)) / 2
+  const ranked: RankedPair[] = []
+  let done = 0
+
+  for (let i = 0; i < valid.length; i++) {
+    for (let j = i + 1; j < valid.length; j++) {
+      done++
+      if (onProgress && (done & 2047) === 0) onProgress(done, before)
+      const left = valid[i]
+      const right = valid[j]
+      if (left.id === right.id || left.norm === right.norm) continue
+      const firstOrder = cmpStr(left.norm, right.norm) || cmpStr(left.id, right.id)
+      const [a, b] = firstOrder <= 0 ? [left, right] : [right, left]
+      const hits: MatchType[] = []
+      let spelling: SpellingMatch | undefined
+      let pronunciation: PronunciationMatch | null | undefined
+      let reorderRank = 0
+
+      if (enabled.has('reorder') && isBlockSwap(a.cp, b.cp)) {
+        hits.push('reorder')
+        const distance = osaNaive(a.cp, b.cp)
+        reorderRank = 1 - distance / Math.max(a.cp.length, b.cp.length)
+      }
+      if (enabled.has('spelling')) {
+        const M = Math.max(a.cp.length, b.cp.length)
+        const distance = osaBanded(a.cp, b.cp, allowedDistance(p, r, M))
+        if (distance !== null && qualifies(p, r, M, distance)) {
+          spelling = { distance, similarity: 1 - distance / M }
+          hits.push('spelling')
+        }
+      }
+      if (enabled.has('pronunciation')) {
+        pronunciation = comparePronunciations(pronunciations?.get(normalizePronunciationKey(a.norm)), pronunciations?.get(normalizePronunciationKey(b.norm)))
+        if (pronunciation && scoreQualifies(pronunciation.similarity, p, r)) hits.push('pronunciation')
+      }
+      if (!hits.length) continue
+      if (enabled.has('spelling') && !spelling) {
+        const M = Math.max(a.cp.length, b.cp.length)
+        const distance = osaNaive(a.cp, b.cp)
+        spelling = { distance, similarity: 1 - distance / M }
+      }
+      const orderedHits = MATCH_TYPES.filter(type => hits.includes(type))
+      const category = hits.includes('reorder') ? 0 : hits.includes('spelling') ? 1 : 2
+      const rank = category === 0 ? reorderRank : category === 1 ? spelling!.similarity : pronunciation!.similarity
+      ranked.push({ pair: { aId: a.id, bId: b.id, aSpelling: a.spelling, bSpelling: b.spelling, matchTypes: orderedHits, spellingMatch: spelling, pronunciation }, category, rank, aNorm: a.norm, bNorm: b.norm })
+    }
+  }
+  ranked.sort((x, y) => x.category - y.category || y.rank - x.rank || cmpStr(x.aNorm, y.aNorm) || cmpStr(x.bNorm, y.bNorm) || cmpStr(x.pair.aId, y.pair.aId) || cmpStr(x.pair.bId, y.pair.bId))
+  return { pairs: ranked.map(item => item.pair), before, comparisons: done, qualified: ranked.length }
+}
+
+type BestSpelling = SpellingMatch & { queries: string[] }
+type BestPronunciation = PronunciationMatch & { queries: string[] }
+
+function addTiedQuery(queries: string[], spelling: string): void {
+  if (!queries.includes(spelling)) queries.push(spelling)
+}
+
+export function manualFindMatches(candidates: SimWord[], queries: SimWord[], matchTypesValue: unknown, pronunciations?: PronunciationDictionary, pronunciationThreshold = DEFAULT_PRONUNCIATION_THRESHOLD, onProgress?: (done: number, total: number) => void): CombinedManualResult {
+  const matchTypes = normalizeMatchTypes(matchTypesValue)
+  const enabled = new Set(matchTypes)
+  const words = candidates.filter(word => word.cp.length > 0)
+  const qs: SimWord[] = []
+  const seenQuery = new Set<string>()
+  for (const query of queries) if (query.cp.length > 0 && !seenQuery.has(query.norm)) { seenQuery.add(query.norm); qs.push(query) }
+  const total = words.length * qs.length
+  const ranked: Array<{ hit: CombinedManualHit; category: number; rank: number; norm: string }> = []
+  let done = 0
+
+  for (const candidate of words) {
+    let reorder: { score: number; queries: string[] } | null = null
+    let spelling: BestSpelling | null = null
+    let pronunciation: BestPronunciation | null = null
+    for (const query of qs) {
+      done++
+      if (onProgress && (done & 2047) === 0) onProgress(done, total)
+      if (candidate.norm === query.norm) continue
+      if (enabled.has('reorder') && isBlockSwap(candidate.cp, query.cp)) {
+        const M = Math.max(candidate.cp.length, query.cp.length)
+        const score = 1 - osaNaive(candidate.cp, query.cp) / M
+        if (!reorder || score > reorder.score) reorder = { score, queries: [query.spelling] }
+        else if (score === reorder.score) addTiedQuery(reorder.queries, query.spelling)
+      }
+      if (enabled.has('spelling')) {
+        const M = Math.max(candidate.cp.length, query.cp.length)
+        const distance = osaNaive(candidate.cp, query.cp)
+        const similarity = 1 - distance / M
+        if (!spelling || similarity > spelling.similarity) spelling = { distance, similarity, queries: [query.spelling] }
+        else if (similarity === spelling.similarity) addTiedQuery(spelling.queries, query.spelling)
+      }
+      if (enabled.has('pronunciation')) {
+        const comparison = comparePronunciations(pronunciations?.get(normalizePronunciationKey(candidate.norm)), pronunciations?.get(normalizePronunciationKey(query.norm)))
+        if (comparison && (!pronunciation || comparison.similarity > pronunciation.similarity)) pronunciation = { ...comparison, queries: [query.spelling] }
+        else if (comparison && pronunciation && comparison.similarity === pronunciation.similarity) addTiedQuery(pronunciation.queries, query.spelling)
+      }
+    }
+    const hits: MatchType[] = []
+    if (spelling) hits.push('spelling')
+    if (reorder) hits.push('reorder')
+    if (pronunciation && pronunciation.similarity + Number.EPSILON >= pronunciationThreshold) hits.push('pronunciation')
+    if (!hits.length) continue
+    const category = reorder ? 0 : spelling ? 1 : 2
+    const primaryQueries = category === 0 ? reorder!.queries : category === 1 ? spelling!.queries : pronunciation!.queries
+    const rank = category === 0 ? reorder!.score : category === 1 ? spelling!.similarity : pronunciation!.similarity
+    ranked.push({
+      category,
+      rank,
+      norm: candidate.norm,
+      hit: {
+        id: candidate.id,
+        spelling: candidate.spelling,
+        bestQuery: primaryQueries[0],
+        tiedQueries: primaryQueries,
+        matchTypes: MATCH_TYPES.filter(type => hits.includes(type)),
+        spellingMatch: spelling ? { distance: spelling.distance, similarity: spelling.similarity, bestQuery: spelling.queries[0], tiedQueries: spelling.queries } : undefined,
+        pronunciation: enabled.has('pronunciation') ? pronunciation ? { ...pronunciation, bestQuery: pronunciation.queries[0], tiedQueries: pronunciation.queries } : null : undefined,
+      },
+    })
+  }
+  ranked.sort((x, y) => x.category - y.category || y.rank - x.rank || cmpStr(x.norm, y.norm) || cmpStr(x.hit.id, y.hit.id))
+  return { hits: ranked.map(item => item.hit), comparisons: done, total }
 }

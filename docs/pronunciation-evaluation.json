@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "scoringVersion": "phoneme-unit-edit-v1",
+  "policyVersion": "phoneme-threshold-v1",
+  "datasetSha256": "fcc359e129e69d218366b5bf29347eb1d4e2e02028b94487cffd8c345d7ae2cc",
+  "labelStatus": "AI-authored expectations; pending human review; not an accuracy claim",
+  "targets": {
+    "falsePositiveRate": 0.1,
+    "falseNegativeRate": 0.1
+  },
+  "selectedThreshold": 0.65,
+  "tuningLengthAnalysis": {
+    "short": {
+      "threshold": 0.5,
+      "count": 42,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0
+    },
+    "long": {
+      "threshold": 0.65,
+      "count": 38,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0
+    }
+  },
+  "tuning": [
+    {
+      "threshold": 0.5,
+      "count": 80,
+      "falsePositiveRate": 0.125,
+      "falseNegativeRate": 0
+    },
+    {
+      "threshold": 0.55,
+      "count": 80,
+      "falsePositiveRate": 0.025,
+      "falseNegativeRate": 0.025
+    },
+    {
+      "threshold": 0.6,
+      "count": 80,
+      "falsePositiveRate": 0.025,
+      "falseNegativeRate": 0.025
+    },
+    {
+      "threshold": 0.65,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.025
+    },
+    {
+      "threshold": 0.7,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.3
+    },
+    {
+      "threshold": 0.75,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.3
+    },
+    {
+      "threshold": 0.8,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.35
+    },
+    {
+      "threshold": 0.85,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.45
+    },
+    {
+      "threshold": 0.9,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.45
+    },
+    {
+      "threshold": 0.95,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.45
+    },
+    {
+      "threshold": 1,
+      "count": 80,
+      "falsePositiveRate": 0,
+      "falseNegativeRate": 0.45
+    }
+  ],
+  "acceptance": {
+    "threshold": 0.65,
+    "count": 80,
+    "falsePositiveRate": 0.075,
+    "falseNegativeRate": 0.025,
+    "falsePositives": [
+      {
+        "split": "acceptance",
+        "category": "spelling-trap",
+        "expected": 0,
+        "left": "seize",
+        "right": "size",
+        "score": 0.6666666666666667,
+        "phones": [
+          "S IY Z",
+          "S AY Z"
+        ],
+        "stress": [
+          [
+            null,
+            1,
+            null
+          ],
+          [
+            null,
+            1,
+            null
+          ]
+        ]
+      },
+      {
+        "split": "acceptance",
+        "category": "spelling-trap",
+        "expected": 0,
+        "left": "leopard",
+        "right": "shepherd",
+        "score": 0.8,
+        "phones": [
+          "L EH P ER D",
+          "SH EH P ER D"
+        ],
+        "stress": [
+          [
+            null,
+            1,
+            null,
+            0,
+            null
+          ],
+          [
+            null,
+            1,
+            null,
+            0,
+            null
+          ]
+        ]
+      },
+      {
+        "split": "acceptance",
+        "category": "spelling-trap",
+        "expected": 0,
+        "left": "island",
+        "right": "iceland",
+        "score": 0.8333333333333334,
+        "phones": [
+          "AY L AH N D",
+          "AY S L AH N D"
+        ],
+        "stress": [
+          [
+            1,
+            null,
+            0,
+            null,
+            null
+          ],
+          [
+            1,
+            null,
+            null,
+            0,
+            null,
+            null
+          ]
+        ]
+      }
+    ],
+    "falseNegatives": [
+      {
+        "split": "acceptance",
+        "category": "near",
+        "expected": 1,
+        "left": "angle",
+        "right": "anger",
+        "score": 0.6,
+        "phones": [
+          "AE NG G AH L",
+          "AE NG G ER"
+        ],
+        "stress": [
+          [
+            1,
+            null,
+            null,
+            0,
+            null
+          ],
+          [
+            1,
+            null,
+            null,
+            0
+          ]
+        ]
+      }
+    ]
+  },
+  "provisionalTargetsMet": true,
+  "releaseApproved": false
+}

@@ -1,31 +1,34 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './style.css'
-import { type ManualHit, type Pair } from './similarity'
+import { DEFAULT_MATCH_TYPES, type CombinedManualHit, type CombinedPair, type MatchType } from './similarity'
 import { CHAPTER_TITLE, MAX_NOTEPAD_BYTES, chapterContent, classifyOutcomes, contentWords, dedupeSpellings, detectMode, findRecentByTitle, parsedWords, planAppend, planCreate, snapshotUnchanged, utf8Length, writeMatchesPlan, type BriefNotepad, type NotepadDetail, type WordOutcome } from './notepad'
 import { ApiError, api, reportMetric } from './api'
 import { parseCandidateList, parseManualInput } from './input'
 import { fetchMeanings, supplementRecords, syncStudyRecords, type Coverage, type RecordRow } from './study-data'
 import { readRestorableState, writeRestorableState } from './session-state'
-import { ApiGuide, ConfusionBadge, MeaningForm, Pager, PairCheck, SyncProgress, type ProgressState } from './ui'
+import { ApiGuide, MatchTypeBadges, MatchTypeSelector, MeaningForm, Pager, PairCheck, PronunciationBadge, SyncProgress, type ProgressState } from './ui'
 import { extractCandidateFile } from './candidate-file'
+import { DEFAULT_PRONUNCIATION_THRESHOLD, MAX_PREDICTION_FILE_BYTES, parsePredictionAsset, type PredictionAsset } from './pronunciation'
 
 type DiscoveryStats = { before: number; comparisons: number; qualified: number }
 type DiscoverStatus = 'idle' | 'running' | 'done' | 'error'
 const PAGE_WORDS = 25
 const PAGE_RESULTS = 30
-const THRESHOLD_DEFAULT = 0.65
+const THRESHOLD_DEFAULT = DEFAULT_PRONUNCIATION_THRESHOLD
 const THRESHOLD_STEP = 0.05
 const MAX_WEAK = 1000
 const MAX_MANUAL_QUERY = 20
+const PRONUNCIATION_THRESHOLD = DEFAULT_PRONUNCIATION_THRESHOLD
 const RESPONSE_LABELS: Record<string, string> = { FORGET: '忘记', VAGUE: '模糊', REMEMBER: '记得', WELL_FAMILIAR: '熟知', CANCEL_WELL_FAMILIAR: '取消熟知' }
 const OUTCOME_LABELS: Record<WordOutcome['status'], string> = { added: '已确认加入', already: '已在词本中', unrecognized: '未在解析结果中确认' }
+const MATCH_TYPE_NAMES: Record<MatchType, string> = { spelling: '相似', reorder: '换序', pronunciation: '发音' }
 
 function responseLabel(row?: RecordRow): string {
   return row?.last_response ? RESPONSE_LABELS[row.last_response] ?? row.last_response : '反馈未知'
 }
 
-type WorkerMessage = { taskId: number; type: string; done?: number; total?: number; pairs?: Pair[]; hits?: ManualHit[]; stats?: DiscoveryStats; comparisons?: number; message?: string }
+type WorkerMessage = { taskId: number; type: string; done?: number; total?: number; pairs?: CombinedPair[]; hits?: CombinedManualHit[]; stats?: DiscoveryStats; comparisons?: number; message?: string; pronunciationError?: string; pronunciationCoverage?: { missingWords: number; missingQueries?: string[] } }
 const SESSION_STATE_KEY = 'momo-confusables:workspace'
 const restored = readRestorableState(window.sessionStorage, SESSION_STATE_KEY)
 
@@ -46,24 +49,34 @@ function App() {
   const [filter, setFilter] = useState('')
   const [candidateText, setCandidateText] = useState(restored.candidateText)
   const [candidateNotice, setCandidateNotice] = useState('')
+  const [predictions, setPredictions] = useState<PredictionAsset | undefined>()
+  const [predictionNotice, setPredictionNotice] = useState('')
+  const [predictionError, setPredictionError] = useState('')
+  const predictionImportRef = useRef(0)
 
   // P2：薄弱词自动发现；P3：手动查找
   const [mode, setMode] = useState<'words' | 'discover' | 'manual'>('words')
   const [threshold, setThreshold] = useState(THRESHOLD_DEFAULT)
   const [weakFilter, setWeakFilter] = useState('')
+  const [matchTypes, setMatchTypes] = useState<MatchType[]>(DEFAULT_MATCH_TYPES)
+  const [matchTypeMessage, setMatchTypeMessage] = useState('')
   const [status, setStatus] = useState<DiscoverStatus>('idle')
   const [discoverError, setDiscoverError] = useState('')
   const [runningText, setRunningText] = useState('')
-  const [pairs, setPairs] = useState<Pair[]>([])
+  const [pairs, setPairs] = useState<CombinedPair[]>([])
+  const [pronunciationWarning, setPronunciationWarning] = useState('')
+  const [pronunciationMissing, setPronunciationMissing] = useState(0)
   const [stats, setStats] = useState<DiscoveryStats | null>(null)
   const [pairPage, setPairPage] = useState(0)
-  const [ranConfig, setRanConfig] = useState<{ threshold: number; filter: string } | null>(null)
+  const [ranConfig, setRanConfig] = useState<{ threshold: number; filter: string; matchTypes: MatchType[] } | null>(null)
   const [manualText, setManualText] = useState(restored.manualText)
   const [manualStatus, setManualStatus] = useState<DiscoverStatus>('idle')
   const [manualError, setManualError] = useState('')
   const [manualNotice, setManualNotice] = useState('')
   const [manualRunningText, setManualRunningText] = useState('')
-  const [manualHits, setManualHits] = useState<ManualHit[]>([])
+  const [manualHits, setManualHits] = useState<CombinedManualHit[]>([])
+  const [manualPronunciationWarning, setManualPronunciationWarning] = useState('')
+  const [manualPronunciationMissing, setManualPronunciationMissing] = useState<{ missingWords: number; missingQueries: string[] } | null>(null)
   const [manualComparisons, setManualComparisons] = useState(0)
   const [manualPage, setManualPage] = useState(0)
   const [ranQueries, setRanQueries] = useState<string[] | null>(null)
@@ -110,8 +123,28 @@ function App() {
 
   function resetSearch() {
     workerRef.current?.terminate(); workerRef.current = null; taskRef.current += 1
-    setStatus('idle'); setDiscoverError(''); setRunningText(''); setPairs([]); setStats(null); setPairPage(0); setRanConfig(null)
-    setManualStatus('idle'); setManualError(''); setManualNotice(''); setManualRunningText(''); setManualHits([]); setManualComparisons(0); setManualPage(0); setRanQueries(null)
+    setStatus('idle'); setDiscoverError(''); setRunningText(''); setPairs([]); setStats(null); setPairPage(0); setRanConfig(null); setPronunciationWarning(''); setPronunciationMissing(0)
+    setManualStatus('idle'); setManualError(''); setManualNotice(''); setManualRunningText(''); setManualHits([]); setManualComparisons(0); setManualPage(0); setRanQueries(null); setManualPronunciationWarning(''); setManualPronunciationMissing(null)
+  }
+
+  function clearPredictions() {
+    predictionImportRef.current += 1
+    setPredictions(undefined); setPredictionNotice(''); setPredictionError(''); resetSearch()
+  }
+
+  async function importPredictions(file: File) {
+    const generation = ++predictionImportRef.current
+    setPredictionError('')
+    try {
+      if (file.size > MAX_PREDICTION_FILE_BYTES) throw new Error('预测读音文件不能超过 2 MB')
+      const text = await file.text()
+      if (generation !== predictionImportRef.current) return
+      const { asset, dictionary } = parsePredictionAsset(JSON.parse(text))
+      resetSearch(); setPredictions(asset)
+      setPredictionNotice(`已载入 ${dictionary.size} 个预测读音，供自动发现和手动查找共用。`)
+    } catch (e) {
+      if (generation === predictionImportRef.current) setPredictionError(`预测读音导入失败：${(e as Error).message}。已有读音仍保留。`)
+    }
   }
 
   // 断开、换 Token 或提交面板关闭时都不保留词本列表、详情与写入结果。
@@ -122,7 +155,7 @@ function App() {
 
   async function authenticate(payload: { token?: string; useDevToken?: boolean }) {
     setBusy(true); setError('')
-    try { await api('connect', payload); setToken(''); setConnected(true); setData(null); setSelected(new Set()); resetSearch(); resetSubmit() }
+    try { await api('connect', payload); setToken(''); setConnected(true); setData(null); setSelected(new Set()); clearPredictions(); resetSubmit() }
     catch (e) { setError((e as Error).message) }
     finally { setBusy(false) }
   }
@@ -132,6 +165,8 @@ function App() {
   async function refresh() {
     const startedAt = performance.now()
     setBusy(true); setError(''); setProgress({ label: '正在核对总量…' }); resetSearch()
+    // A failed refresh must not leave an old snapshot labelled as freshly verified.
+    setData(current => current ? { ...current, finished: false } : null)
     try {
       const next = await syncStudyRecords(snapshot => { setData(snapshot); setProgress({ label: `已同步 ${snapshot.rows.length.toLocaleString()} / ${snapshot.total.toLocaleString()}`, current: snapshot.rows.length, total: snapshot.total }) })
       setData(next); setPage(0); setMeanings({}); setMeaningError('')
@@ -143,7 +178,7 @@ function App() {
   }
 
   async function disconnect() {
-    try { await api('disconnect', {}) } finally { setConnected(false); setData(null); setMeanings({}); setCustomMeanings({}); setDrafts({}); setCandidateText(''); setError(''); setPage(0); setSelected(new Set()); setMode('words'); resetSearch(); resetSubmit() }
+    try { await api('disconnect', {}) } finally { setConnected(false); setData(null); setMeanings({}); setCustomMeanings({}); setDrafts({}); setCandidateText(''); setError(''); setPage(0); setSelected(new Set()); setMode('words'); clearPredictions(); resetSubmit() }
   }
 
   async function supplement() {
@@ -173,24 +208,24 @@ function App() {
 
   const unknownCount = useMemo(() => (data?.rows ?? []).filter(r => !r.last_response).length, [data])
 
-  function runDiscovery(thresholdOverride?: number) {
+  function runDiscovery(thresholdOverride?: number, matchTypesOverride: MatchType[] = matchTypes) {
     const startedAt = performance.now()
     const useThreshold = thresholdOverride ?? threshold
     if (weakRows.length < 2) { setStatus('error'); setDiscoverError('薄弱词不足两个，无法组成词对；请放宽筛选或先同步更多学习记录。'); setPairs([]); setStats(null); return }
     if (weakRows.length > MAX_WEAK) { setStatus('error'); setDiscoverError(`当前薄弱词 ${weakRows.length} 个，超过首版上限 ${MAX_WEAK}；请用下方筛选缩小范围，结果不做静默截断。`); setPairs([]); setStats(null); return }
     const worker = spawnWorker((w, message) => {
       if (message.type === 'progress') setRunningText(`正在比较 ${message.done?.toLocaleString()} / ${message.total?.toLocaleString()} 个词对…`)
-      else if (message.type === 'done') { setPairs(message.pairs ?? []); setStats(message.stats ?? null); setStatus('done'); setDiscoverError(''); setPairPage(0); reportMetric('similarity_complete', { mode: 'auto', durationMs: Math.round(performance.now() - startedAt), results: message.pairs?.length ?? 0 }); w.terminate(); workerRef.current = null }
+      else if (message.type === 'done') { setPairs(message.pairs ?? []); setStats(message.stats ?? null); setStatus('done'); setDiscoverError(''); setPronunciationWarning(message.pronunciationError ?? ''); setPronunciationMissing(message.pronunciationCoverage?.missingWords ?? 0); setPairPage(0); reportMetric('similarity_complete', { mode: 'auto', durationMs: Math.round(performance.now() - startedAt), results: message.pairs?.length ?? 0 }); w.terminate(); workerRef.current = null }
       else if (message.type === 'error') { setStatus('error'); setDiscoverError(message.message ?? '相似度计算失败'); w.terminate(); workerRef.current = null }
     })
-    setStatus('running'); setDiscoverError(''); setPairs([]); setStats(null); setRunningText('正在准备…'); setRanConfig({ threshold: useThreshold, filter: weakFilter })
+    setStatus('running'); setDiscoverError(''); setPronunciationWarning(''); setPronunciationMissing(0); setPairs([]); setStats(null); setPairPage(0); setRunningText('正在准备…'); setRanConfig({ threshold: useThreshold, filter: weakFilter, matchTypes: matchTypesOverride })
     if (manualStatus === 'running') { setManualStatus('idle'); setManualRunningText('') }
-    worker.postMessage({ taskId: taskRef.current, kind: 'auto', words: weakRows.map(r => ({ id: r.voc_id, spelling: r.voc_spelling })), p: Math.round(useThreshold * 100), r: 100 })
+    worker.postMessage({ taskId: taskRef.current, kind: 'auto', words: weakRows.map(r => ({ id: r.voc_id, spelling: r.voc_spelling })), p: Math.round(useThreshold * 100), r: 100, matchTypes: matchTypesOverride, predictions: matchTypesOverride.includes('pronunciation') ? predictions : undefined })
   }
 
   function cancelDiscovery() { resetSearch() }
 
-  function runManual() {
+  function runManual(matchTypesOverride: MatchType[] = matchTypes) {
     const startedAt = performance.now()
     workerRef.current?.terminate()
     const parsed = parseManualInput(manualText)
@@ -198,19 +233,31 @@ function App() {
     if (!parsed.words.length) { setManualStatus('error'); setManualError('请输入至少一个英文查询词。'); setManualNotice(''); return }
     if (parsed.words.length > MAX_MANUAL_QUERY) { setManualStatus('error'); setManualError(`去重后 ${parsed.words.length} 个查询词，超过本网站上限 ${MAX_MANUAL_QUERY} 个（这不是墨墨接口限制）；请减少查询词。`); setManualNotice(''); return }
     if (!data || !data.rows.length) { setManualStatus('error'); setManualError('没有可比较的候选：请先同步学习记录。'); setManualNotice(''); return }
-    setManualStatus('running'); setManualError(''); setManualHits([]); setManualComparisons(0); setManualPage(0); setManualRunningText('正在准备…')
+    setManualStatus('running'); setManualError(''); setManualHits([]); setManualComparisons(0); setManualPronunciationWarning(''); setManualPronunciationMissing(null); setManualPage(0); setManualRunningText('正在准备…')
     setManualNotice(`已解析 ${parsed.words.length} 个查询词${parsed.duplicates ? `，忽略 ${parsed.duplicates} 个重复项` : ''}。`)
     setRanQueries(parsed.words)
     if (status === 'running') { setStatus('idle'); setRunningText('') }
     const worker = spawnWorker((w, message) => {
       if (message.type === 'progress') setManualRunningText(`正在比较 ${message.done?.toLocaleString()} / ${message.total?.toLocaleString()} 对（候选 × 查询词）…`)
-      else if (message.type === 'manualDone') { setManualHits(message.hits ?? []); setManualComparisons(message.comparisons ?? 0); setManualStatus('done'); setManualError(''); setManualPage(0); reportMetric('similarity_complete', { mode: 'manual', durationMs: Math.round(performance.now() - startedAt), results: message.hits?.length ?? 0 }); w.terminate(); workerRef.current = null }
+      else if (message.type === 'manualDone') { setManualHits(message.hits ?? []); setManualComparisons(message.comparisons ?? 0); setManualStatus('done'); setManualError(''); setManualPronunciationWarning(message.pronunciationError ?? ''); setManualPronunciationMissing(message.pronunciationCoverage ? { missingWords: message.pronunciationCoverage.missingWords, missingQueries: message.pronunciationCoverage.missingQueries ?? [] } : null); setManualPage(0); reportMetric('similarity_complete', { mode: 'manual', durationMs: Math.round(performance.now() - startedAt), results: message.hits?.length ?? 0 }); w.terminate(); workerRef.current = null }
       else if (message.type === 'error') { setManualStatus('error'); setManualError(message.message ?? '相似度计算失败'); w.terminate(); workerRef.current = null }
     })
-    worker.postMessage({ taskId: taskRef.current, kind: 'manual', queries: parsed.words.map((w, i) => ({ id: 'q' + i, spelling: w })), words: data.rows.map(r => ({ id: r.voc_id, spelling: r.voc_spelling })) })
+    worker.postMessage({ taskId: taskRef.current, kind: 'manual', queries: parsed.words.map((w, i) => ({ id: 'q' + i, spelling: w })), words: data.rows.map(r => ({ id: r.voc_id, spelling: r.voc_spelling })), matchTypes: matchTypesOverride, pronunciationThreshold: PRONUNCIATION_THRESHOLD, predictions: matchTypesOverride.includes('pronunciation') ? predictions : undefined })
   }
 
   function cancelManual() { resetSearch() }
+
+  function toggleMatchType(type: MatchType) {
+    const selectedType = matchTypes.includes(type)
+    if (selectedType && matchTypes.length === 1) { setMatchTypeMessage('至少选择一种匹配类型'); return }
+    const next = selectedType ? matchTypes.filter(value => value !== type) : DEFAULT_MATCH_TYPES.filter(value => value === type || matchTypes.includes(value))
+    setMatchTypes(next); setMatchTypeMessage(''); setPairPage(0); setManualPage(0)
+    workerRef.current?.terminate(); workerRef.current = null; taskRef.current += 1
+    if (mode === 'discover' && (status === 'done' || status === 'running')) runDiscovery(undefined, next)
+    else { setStatus('idle'); setPairs([]); setStats(null); setRanConfig(null); setPronunciationWarning(''); setPronunciationMissing(0) }
+    if (mode === 'manual' && (manualStatus === 'done' || manualStatus === 'running')) runManual(next)
+    else { setManualStatus('idle'); setManualHits([]); setManualComparisons(0); setRanQueries(null); setManualPronunciationWarning(''); setManualPronunciationMissing(null) }
+  }
 
   useEffect(() => () => workerRef.current?.terminate(), [])
 
@@ -449,35 +496,44 @@ function App() {
         {!data.finished && <p className="warning">还有 {Math.max(0, data.total - data.rows.length).toLocaleString()} 条未同步。</p>}
         <nav className="tabs" aria-label="视图模式"><button className={'tab' + (mode === 'words' ? ' active' : '')} aria-pressed={mode === 'words'} onClick={() => setMode('words')}>已同步词表</button><button className={'tab' + (mode === 'discover' ? ' active' : '')} aria-pressed={mode === 'discover'} onClick={() => setMode('discover')}>自动发现</button><button className={'tab' + (mode === 'manual' ? ' active' : '')} aria-pressed={mode === 'manual'} onClick={() => setMode('manual')}>手动查找</button></nav>
         {submitPanel}
+        {mode !== 'words' && <details className="notice"><summary>补充预测读音{predictions ? `（已载入 ${Object.keys(predictions.entries).length} 个）` : ''}</summary><p>导入本机生成的读音文件，仅在当前页面使用，不上传；刷新页面或断开账号后需重新导入。预测可能有误，词典读音优先。</p><label>导入预测读音 <input type="file" accept=".json,application/json" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void importPredictions(file) }}/></label>{predictions && <button className="ghost" onClick={clearPredictions}>移除预测读音</button>}{predictionNotice && <p role="status">{predictionNotice}</p>}{predictionError && <p className="error" role="alert">{predictionError}</p>}</details>}
         {mode === 'discover' ? <div className="workspace"><section className="records discover"><div className="recordsHead"><div><span className="eyebrow">AUTO DISCOVERY</span><h2>薄弱词自动发现</h2></div></div>
-          <div className="controls"><label className="thresholdControl">拼写相似阈值 <span className="thresholdSlider"><input type="range" min={0} max={1} step={THRESHOLD_STEP} value={threshold} disabled={status === 'running'} aria-valuetext={threshold.toFixed(2)} onChange={e => setThreshold(Number(e.target.value))}/><output>{threshold.toFixed(2)}</output></span><span className="hint">0–1，默认 {THRESHOLD_DEFAULT}；编辑距离受此阈值限制，词块换序始终检出。</span></label><label>缩小薄弱词范围 <input value={weakFilter} disabled={status === 'running'} onChange={e => setWeakFilter(e.target.value)} placeholder="可选：按拼写筛选"/></label><div className="controlActions">{status === 'running' ? <button className="ghost" onClick={cancelDiscovery}>取消</button> : <button onClick={() => runDiscovery()} disabled={busy}>{status === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
+          <div className="controls"><MatchTypeSelector value={matchTypes} message={matchTypeMessage} onChange={toggleMatchType}/><label className="thresholdControl">相似度阈值 <span className="thresholdSlider"><input type="range" min={0} max={1} step={THRESHOLD_STEP} value={threshold} disabled={status === 'running' || !matchTypes.some(type => type === 'spelling' || type === 'pronunciation')} aria-valuetext={threshold.toFixed(2)} onChange={e => setThreshold(Number(e.target.value))}/><output>{threshold.toFixed(2)}</output></span><span className="hint">用于拼写与发音路径；词块换序不受阈值限制。</span></label><label>缩小薄弱词范围 <input value={weakFilter} disabled={status === 'running'} onChange={e => setWeakFilter(e.target.value)} placeholder="可选：按拼写筛选"/></label><div className="controlActions">{status === 'running' ? <button className="ghost" onClick={cancelDiscovery}>取消</button> : <button onClick={() => runDiscovery()} disabled={busy}>{status === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
           <p className="scopeLine">薄弱词（忘记/模糊）<strong>{weakRows.length}</strong> 个 · 反馈未知 <strong>{unknownCount}</strong> 个单独呈现，不参与自动发现。{!data.finished && ' 当前为部分同步范围，可能漏检未同步的词对。'}</p>
           {status === 'running' && <p className="notice" role="status">{runningText}</p>}
           {status === 'error' && <p className="error" role="alert">{discoverError}</p>}
+          {pronunciationWarning && <p className="warning" role="status">部分发音数据不可用：{pronunciationWarning}。其他已选类型的结果仍保留。</p>}
+          {pronunciationMissing > 0 && <p className="notice" role="status">当前范围有 {pronunciationMissing} 个词暂无可用读音；这些词不会按零分参与发音判断，仍可经其他已选类型命中。</p>}
           {meaningError && <p className="error" role="alert">词典查询失败：{meaningError} <button className="ghost" onClick={() => setMeaningRetry(n => n + 1)}>重试释义</button></p>}
           {status === 'done' && <>
             {discoveryStale && <p className="notice">阈值或筛选条件已修改，当前结果仍属于上次查找（阈值 {(ranConfig?.threshold ?? 0).toFixed(2)}）。点击“重新查找”后结果才会更新。</p>}
-            <p className="scopeLine" role="status">阈值 {(ranConfig?.threshold ?? threshold).toFixed(2)} 下找到 <strong>{pairs.length}</strong> 对（含词块换序）{stats ? ` · 过滤前 ${stats.before.toLocaleString()} 词对，比较 ${stats.comparisons.toLocaleString()}，命中 ${stats.qualified.toLocaleString()}` : ''}。</p>
-            {pairs.length === 0 ? <p className="empty">没有达到当前阈值（{(ranConfig?.threshold ?? threshold).toFixed(2)}）或符合词块换序的词对。<button className="ghost" disabled={threshold <= 0 || busy} onClick={() => { const next = Math.max(0, Math.round((threshold - THRESHOLD_STEP) * 100) / 100); setThreshold(next); runDiscovery(next) }}>降低阈值并重查</button></p> : !ready ? <p className="empty" role="status">正在准备本页中英对照…</p> : <ul className="pairList">{pagePairs.map(pair => { const both = selected.has(pair.aId) && selected.has(pair.bId); const half = !both && (selected.has(pair.aId) || selected.has(pair.bId)); return <li key={pair.aId + '|' + pair.bId}><div className="pairActions"><PairCheck checked={both} indeterminate={half} onChange={() => togglePair(pair.aId, pair.bId)} label={`选择词对 ${pair.aSpelling} 与 ${pair.bSpelling}`}/><ConfusionBadge a={pair.aSpelling} b={pair.bSpelling}/><span className="simScore">{pair.matchType === 'block-swap' ? '词块换序' : `拼写 ${Math.round(pair.similarity * 100)}`}</span></div><div className="pairWords">{[{ id: pair.aId, spelling: pair.aSpelling }, { id: pair.bId, spelling: pair.bSpelling }].map(side => { const row = wordById.get(side.id); return <div className="pairSide" key={side.id}><label className="pairPick"><input type="checkbox" checked={selected.has(side.id)} onChange={() => toggleWord(side.id)} aria-label={`选择单词 ${side.spelling}`}/><strong>{side.spelling}</strong></label><span className="pairMeaning">{displayMeaning(side.spelling) || '正在获取释义…'}</span><span className="pairMeta">{responseLabel(row)}</span></div> })}</div></li> })}</ul>}
+            <p className="scopeLine" role="status">{(ranConfig?.matchTypes ?? matchTypes).map(type => MATCH_TYPE_NAMES[type]).join('、')} · 阈值 {(ranConfig?.threshold ?? threshold).toFixed(2)} 下找到 <strong>{pairs.length}</strong> 对{stats ? ` · 候选 ${stats.before.toLocaleString()} 词对，比较 ${stats.comparisons.toLocaleString()}，命中 ${stats.qualified.toLocaleString()}` : ''}。</p>
+            {pairs.length === 0 ? <p className="empty">当前选择下没有匹配项，不会自动改回全选。{matchTypes.some(type => type === 'spelling' || type === 'pronunciation') && <button className="ghost" disabled={threshold <= 0 || busy} onClick={() => { const next = Math.max(0, Math.round((threshold - THRESHOLD_STEP) * 100) / 100); setThreshold(next); runDiscovery(next) }}>降低阈值并重查</button>}</p> : !ready ? <p className="empty" role="status">正在准备本页中英对照…</p> : <ul className="pairList">{pagePairs.map(pair => {
+              const both = selected.has(pair.aId) && selected.has(pair.bId)
+              const half = !both && (selected.has(pair.aId) || selected.has(pair.bId))
+              return <li key={pair.aId + '|' + pair.bId}><div className="pairActions"><PairCheck checked={both} indeterminate={half} onChange={() => togglePair(pair.aId, pair.bId)} label={`选择词对 ${pair.aSpelling} 与 ${pair.bSpelling}`}/><MatchTypeBadges value={pair.matchTypes}/>{pair.spellingMatch && <span className="simScore">拼写 {Math.round(pair.spellingMatch.similarity * 100)}</span>}<PronunciationBadge match={pair.pronunciation}/></div><div className="pairWords">{[{ id: pair.aId, spelling: pair.aSpelling }, { id: pair.bId, spelling: pair.bSpelling }].map(side => { const row = wordById.get(side.id); return <div className="pairSide" key={side.id}><label className="pairPick"><input type="checkbox" checked={selected.has(side.id)} onChange={() => toggleWord(side.id)} aria-label={`选择单词 ${side.spelling}`}/><strong>{side.spelling}</strong></label><span className="pairMeaning">{displayMeaning(side.spelling) || '正在获取释义…'}</span><span className="pairMeta">{responseLabel(row)}</span></div> })}</div></li>
+            })}</ul>}
             <Pager page={pairPage} total={pairs.length} size={PAGE_RESULTS} summary={`共 ${pairs.length} 对`} onPage={setPairPage}/>
           </>}
-          {status !== 'done' && status !== 'running' && <div className="empty large">按“开始查找”在薄弱词内计算拼写相似度，结果按相似分降序显示。中文与英文齐备后一起呈现。</div>}
+          {status !== 'done' && status !== 'running' && <div className="empty large">选择匹配类型后，在薄弱词内分别召回并按并集合并；同一词对只显示一次并标注全部命中类型。</div>}
         </section>
           {selectedPanel}
         </div> : mode === 'manual' ? <div className="workspace"><section className="records discover manual"><div className="recordsHead"><div><span className="eyebrow">MANUAL LOOKUP</span><h2>手动查找相似词</h2></div></div>
-          <div className="controls manualControls"><label className="manualQueryLabel">查询英文词（换行、英文逗号或中文逗号分隔，最多 {MAX_MANUAL_QUERY} 个）<textarea aria-label="查询英文词" value={manualText} disabled={manualStatus === 'running'} rows={3} placeholder={'adapt\nadopt，a band'} onChange={e => setManualText(e.target.value)}/></label><div className="controlActions">{manualStatus === 'running' ? <button className="ghost" onClick={cancelManual}>取消</button> : <button onClick={runManual} disabled={busy}>{manualStatus === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
-          <p className="scopeLine">候选范围：已同步的 <strong>{data.rows.length}</strong> 个已加入单词。词块换序优先，其余候选按准确相似分降序保留。</p>
+          <div className="controls manualControls"><MatchTypeSelector value={matchTypes} message={matchTypeMessage} onChange={toggleMatchType}/><label className="manualQueryLabel">查询英文词（换行、英文逗号或中文逗号分隔，最多 {MAX_MANUAL_QUERY} 个）<textarea aria-label="查询英文词" value={manualText} disabled={manualStatus === 'running'} rows={3} placeholder={'adapt\nadopt，a band'} onChange={e => setManualText(e.target.value)}/><span className="hint">手动发音匹配阈值为 {PRONUNCIATION_THRESHOLD.toFixed(2)}。</span></label><div className="controlActions">{manualStatus === 'running' ? <button className="ghost" onClick={cancelManual}>取消</button> : <button onClick={() => runManual()} disabled={busy}>{manualStatus === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
+          <p className="scopeLine">候选范围：已同步的 <strong>{data.rows.length}</strong> 个已加入单词。换序优先；包含相似时保留原有拼写顺序，仅发音命中项追加在后。</p>
           {manualStatus === 'running' && <p className="notice" role="status">{manualRunningText}</p>}
           {manualStatus === 'error' && <p className="error" role="alert">{manualError}</p>}
+          {manualPronunciationWarning && <p className="warning" role="status">部分发音数据不可用：{manualPronunciationWarning}。其他已选类型的结果仍保留。</p>}
+          {manualPronunciationMissing && (manualPronunciationMissing.missingWords > 0 || manualPronunciationMissing.missingQueries.length > 0) && <p className="notice" role="status">{manualPronunciationMissing.missingQueries.length > 0 ? `查询词 ${manualPronunciationMissing.missingQueries.join('、')} 暂无可用读音；` : ''}候选范围有 {manualPronunciationMissing.missingWords} 个词暂无可用读音。缺失读音不按零分参与判断；尚未支持实时预测新词。</p>}
           {manualNotice && manualStatus !== 'error' && manualStatus !== 'running' && <p className="notice">{manualNotice}</p>}
           {meaningError && <p className="error" role="alert">词典查询失败：{meaningError} <button className="ghost" onClick={() => setMeaningRetry(n => n + 1)}>重试释义</button></p>}
           {manualStatus === 'done' && <>
             {manualStale && <p className="notice">查询词已修改，当前结果仍属于上次查找（{(ranQueries ?? []).length} 个词）。点击“重新查找”后结果才会更新。</p>}
             <p className="scopeLine" role="status">查询词：{(ranQueries ?? []).join('、')} · 返回 <strong>{manualHits.length}</strong> 个候选 · 比较 {manualComparisons.toLocaleString()} 对。</p>
-            {manualHits.length === 0 ? <p className="empty">没有可比较的候选：每个候选词与每个查询词整词相同，或候选范围为空。</p> : !ready ? <p className="empty" role="status">正在准备本页中英对照…</p> : <ul className="manualList">{pageHits.map(hit => { const row = wordById.get(hit.id); return <li key={hit.id}><div className="hitMain"><label className="hitPick"><input type="checkbox" checked={selected.has(hit.id)} onChange={() => toggleWord(hit.id)} aria-label={`选择单词 ${hit.spelling}`}/><strong>{hit.spelling}</strong></label><ConfusionBadge a={hit.spelling} b={hit.bestQuery}/><span className="simScore">{hit.matchType === 'block-swap' ? '词块换序' : `拼写 ${Math.round(hit.similarity * 100)}`}</span>{hit.tiedQueries.length > 1 ? <details className="hitQuery"><summary>最接近输入词“{hit.bestQuery}”（{hit.tiedQueries.length} 个并列，展开查看）</summary><span>{hit.tiedQueries.join('、')}</span></details> : <span className="hitQuery">最接近输入词“{hit.bestQuery}”</span>}</div><div className="pairMeaning">{displayMeaning(hit.spelling) || '正在获取释义…'}</div><div className="hitMeta"><span>{responseLabel(row)}</span><span>{typeof row?.study_count === 'number' ? `学习 ${row.study_count} 次` : '次数未知'}</span></div></li> })}</ul>}
+            {manualHits.length === 0 ? <p className="empty">当前选择下没有匹配项，不会自动改回全选。</p> : !ready ? <p className="empty" role="status">正在准备本页中英对照…</p> : <ul className="manualList">{pageHits.map(hit => { const row = wordById.get(hit.id); return <li key={hit.id}><div className="hitMain"><label className="hitPick"><input type="checkbox" checked={selected.has(hit.id)} onChange={() => toggleWord(hit.id)} aria-label={`选择单词 ${hit.spelling}`}/><strong>{hit.spelling}</strong></label><MatchTypeBadges value={hit.matchTypes}/>{hit.spellingMatch && <span className="simScore">拼写 {Math.round(hit.spellingMatch.similarity * 100)}</span>}<PronunciationBadge match={hit.pronunciation}/>{hit.tiedQueries.length > 1 ? <details className="hitQuery"><summary>最接近输入词“{hit.bestQuery}”（{hit.tiedQueries.length} 个并列，展开查看）</summary><span>{hit.tiedQueries.join('、')}</span></details> : <span className="hitQuery">最接近输入词“{hit.bestQuery}”</span>}</div><div className="pairMeaning">{displayMeaning(hit.spelling) || '正在获取释义…'}</div><div className="hitMeta"><span>{responseLabel(row)}</span><span>{typeof row?.study_count === 'number' ? `学习 ${row.study_count} 次` : '次数未知'}</span></div></li> })}</ul>}
             <Pager page={manualPage} total={manualHits.length} size={PAGE_RESULTS} summary={`共 ${manualHits.length} 个候选`} onPage={setManualPage}/>
           </>}
-          {manualStatus !== 'done' && manualStatus !== 'running' && <div className="empty large">输入一个或多个英文词，在经学习记录确认的候选范围内查找拼写相似词；每个候选只显示一次，按其最高相似分降序，与自动发现共用已选清单。</div>}
+          {manualStatus !== 'done' && manualStatus !== 'running' && <div className="empty large">输入一个或多个英文词，按所选类型分别查找；每个候选只显示一次并标注全部命中类型，与自动发现共用选择状态。</div>}
         </section>
           {selectedPanel}
         </div> : <section className="records"><div className="recordsHead"><div><span className="eyebrow">STUDY RECORDS</span><h2>词语与释义</h2></div><label>查找已同步词 <input value={filter} onChange={e => { setFilter(e.target.value); setPage(0) }} placeholder="输入英文拼写"/></label></div>

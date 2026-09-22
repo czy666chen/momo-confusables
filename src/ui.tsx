@@ -1,11 +1,41 @@
 import { useEffect, useState } from 'react'
 import { confusionSignal } from './input'
+import { MATCH_TYPES, type MatchType } from './similarity'
+import type { PronunciationMatch } from './pronunciation'
 
 const HAN = /[\u3400-\u9fff]/u
 const MEANING_MAX = 500
 
 export function PairCheck(props: { checked: boolean; indeterminate: boolean; onChange: () => void; label: string }) {
   return <input type="checkbox" checked={props.checked} aria-label={props.label} onChange={props.onChange} ref={el => { if (el) el.indeterminate = props.indeterminate }} />
+}
+
+const MATCH_TYPE_LABELS: Record<MatchType, string> = { spelling: '相似', reorder: '换序', pronunciation: '发音' }
+
+export function MatchTypeSelector({ value, message, onChange }: { value: MatchType[]; message: string; onChange: (type: MatchType) => void }) {
+  return <fieldset className="matchTypes" aria-describedby="match-types-hint match-types-message">
+    <legend>匹配类型</legend>
+    <div>{MATCH_TYPES.map(type => <label key={type}><input type="checkbox" checked={value.includes(type)} onChange={() => onChange(type)}/>{MATCH_TYPE_LABELS[type]}</label>)}</div>
+    <span id="match-types-hint" className="hint">至少选择一项；多个类型按“满足任意一项”合并。</span>
+    <span id="match-types-message" className={message ? 'matchTypeMessage visible' : 'matchTypeMessage'} role="status" aria-live="polite">{message}</span>
+  </fieldset>
+}
+
+export function MatchTypeBadges({ value }: { value: MatchType[] }) {
+  return <span className="matchBadges" aria-label={`命中类型：${value.map(type => MATCH_TYPE_LABELS[type]).join('、')}`}>{value.map(type => <span key={type}>{MATCH_TYPE_LABELS[type]}</span>)}</span>
+}
+
+function pronunciationText(match: PronunciationMatch): string {
+  const format = (phones: string[], stress: Array<number | null>) => phones.map((phone, index) => `${phone}${stress[index] ?? ''}`).join(' ')
+  return `${format(match.left.phones, match.left.stress)} ↔ ${format(match.right.phones, match.right.stress)}`
+}
+
+export function PronunciationBadge({ match }: { match: PronunciationMatch | null | undefined }) {
+  if (match === undefined) return null
+  if (match === null) return <span className="phoneticScore unavailable">暂无读音</span>
+  const source = match.source === 'dictionary' ? '词典读音' : match.source === 'prediction' ? '预测读音' : '词典读音 / 预测读音'
+  const sideSource = (side: PronunciationMatch['left']) => side.source === 'prediction' ? `预测读音（${side.modelVersion}）` : '词典读音'
+  return <span className="phoneticScore match" title={`${sideSource(match.left)} ↔ ${sideSource(match.right)}：${pronunciationText(match)}`}>发音 {Math.round(match.similarity * 100)} · {source}</span>
 }
 
 export function ConfusionBadge({ a, b }: { a: string; b: string }) {

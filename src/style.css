@@ -189,6 +189,12 @@ footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 
 .records.discover .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; padding: 20px 24px; border-bottom: 1px solid var(--divider) }
 .records.discover .controls label { display: grid; gap: 6px; min-width: 180px }
 .records.discover .controls .thresholdControl { min-width: 260px }
+.matchTypes { min-width: 250px; margin: 0; padding: 0; border: 0 }
+.matchTypes legend { margin-bottom: 7px; color: var(--label); font-size: 13px; font-weight: 700 }
+.matchTypes > div { display: flex; gap: 14px; flex-wrap: wrap }
+.records.discover .controls .matchTypes label { display: flex; min-width: 0; grid-template-columns: none; align-items: center; gap: 6px; color: var(--fg); font-size: 14px; font-weight: 500 }
+.matchTypeMessage { display: block; min-height: 18px; margin-top: 4px; color: transparent; font-size: 12px }
+.matchTypeMessage.visible { color: var(--error-fg) }
 .thresholdSlider { display: flex; align-items: center; gap: 12px }
 .records.discover .controls input[type=range] { width: 190px; height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--primary); cursor: pointer }
 .records.discover .controls input[type=range]:disabled { cursor: not-allowed }
@@ -205,6 +211,9 @@ footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 
 .simScore { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--notice-fg); background: var(--notice-bg); border-radius: var(--radius-pill); padding: 3px 10px; white-space: nowrap }
 .phoneticScore { font-size: 12px; color: var(--text-meta); border: 1px solid var(--control-border); border-radius: var(--radius-pill); padding: 3px 9px; white-space: nowrap; cursor: help }
 .phoneticScore.match { color: var(--notice-fg); background: var(--notice-bg); border-color: transparent }
+.phoneticScore.unavailable { cursor: default; font-style: italic }
+.matchBadges { display: inline-flex; gap: 5px; flex-wrap: wrap }
+.matchBadges > span { color: var(--ghost-fg); background: var(--ghost-hover); border-radius: var(--radius-pill); padding: 3px 9px; font-size: 12px; font-weight: 700 }
 .pairWords { display: grid; grid-template-columns: 1fr 1fr; gap: 14px }
 .pairSide { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: baseline; min-width: 0 }
 .pairPick { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1 }

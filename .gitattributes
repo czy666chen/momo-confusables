@@ -1,0 +1,3 @@
+# Preserve checksummed upstream bytes on Windows as well as Linux.
+data/cmudict/cmudict.dict -text
+data/g2p/checkpoint20.npz binary
