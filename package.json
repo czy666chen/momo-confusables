@@ -17,7 +17,6 @@
     "build:pronunciation": "node scripts/build-pronunciation-data.mjs",
     "build": "python p0/build_dictionary_shards.py && python p0/build_dictionary_modules.py && npm run build:pronunciation && npm run typecheck && vite build",
     "preview": "wrangler dev",
-    "deploy:preview": "npm run build && wrangler deploy --env preview",
     "deploy": "npm run build && wrangler deploy",
     "build:g2p": "python scripts/build-g2p-data.py",
     "test:g2p": "node scripts/test-g2p.mjs && python scripts/test-g2p-build.py",
