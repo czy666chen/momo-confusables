@@ -31,6 +31,22 @@ function responseLabel(row?: RecordRow): string {
 type WorkerMessage = { taskId: number; type: string; done?: number; total?: number; pairs?: CombinedPair[]; hits?: CombinedManualHit[]; stats?: DiscoveryStats; comparisons?: number; message?: string; pronunciationError?: string; pronunciationCoverage?: { missingWords: number; missingQueries?: string[] } }
 const SESSION_STATE_KEY = 'momo-confusables:workspace'
 const restored = readRestorableState(window.sessionStorage, SESSION_STATE_KEY)
+type ViewMode = 'words' | 'discover' | 'manual'
+const initialParams = new URLSearchParams(window.location.search)
+const initialMode = (['words', 'discover', 'manual'] as const).find(value => value === initialParams.get('view')) ?? 'words'
+const initialPage = (key: string) => {
+  const value = Number(initialParams.get(key))
+  return Number.isSafeInteger(value) && value > 0 ? value - 1 : 0
+}
+const initialThreshold = (() => {
+  const value = Number(initialParams.get('threshold'))
+  return initialParams.has('threshold') && Number.isFinite(value) && value >= 0 && value <= 1 ? value : THRESHOLD_DEFAULT
+})()
+const initialMatchTypes = (() => {
+  const requested = initialParams.get('types')?.split(',') ?? []
+  const selected = DEFAULT_MATCH_TYPES.filter(type => requested.includes(type))
+  return selected.length ? selected : DEFAULT_MATCH_TYPES
+})()
 
 function App() {
   const [guideOpen, setGuideOpen] = useState(() => window.location.hash === '#api-guide')
@@ -40,13 +56,13 @@ function App() {
   const [error, setError] = useState('')
   const [data, setData] = useState<Coverage | null>(null)
   const [progress, setProgress] = useState<ProgressState | null>(null)
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(() => initialPage('page'))
   const [meanings, setMeanings] = useState<Record<string, string | null>>({})
   const [customMeanings, setCustomMeanings] = useState<Record<string, string>>(restored.customMeanings)
   const [drafts, setDrafts] = useState<Record<string, string>>(restored.drafts)
   const [meaningError, setMeaningError] = useState('')
   const [meaningRetry, setMeaningRetry] = useState(0)
-  const [filter, setFilter] = useState('')
+  const [filter, setFilter] = useState(() => initialParams.get('filter') ?? '')
   const [candidateText, setCandidateText] = useState(restored.candidateText)
   const [candidateNotice, setCandidateNotice] = useState('')
   const [predictions, setPredictions] = useState<PredictionAsset | undefined>()
@@ -55,10 +71,10 @@ function App() {
   const predictionImportRef = useRef(0)
 
   // P2：薄弱词自动发现；P3：手动查找
-  const [mode, setMode] = useState<'words' | 'discover' | 'manual'>('words')
-  const [threshold, setThreshold] = useState(THRESHOLD_DEFAULT)
-  const [weakFilter, setWeakFilter] = useState('')
-  const [matchTypes, setMatchTypes] = useState<MatchType[]>(DEFAULT_MATCH_TYPES)
+  const [mode, setMode] = useState<ViewMode>(initialMode)
+  const [threshold, setThreshold] = useState(initialThreshold)
+  const [weakFilter, setWeakFilter] = useState(() => initialParams.get('weak') ?? '')
+  const [matchTypes, setMatchTypes] = useState<MatchType[]>(initialMatchTypes)
   const [matchTypeMessage, setMatchTypeMessage] = useState('')
   const [status, setStatus] = useState<DiscoverStatus>('idle')
   const [discoverError, setDiscoverError] = useState('')
@@ -67,7 +83,7 @@ function App() {
   const [pronunciationWarning, setPronunciationWarning] = useState('')
   const [pronunciationMissing, setPronunciationMissing] = useState(0)
   const [stats, setStats] = useState<DiscoveryStats | null>(null)
-  const [pairPage, setPairPage] = useState(0)
+  const [pairPage, setPairPage] = useState(() => initialPage('pairs'))
   const [ranConfig, setRanConfig] = useState<{ threshold: number; filter: string; matchTypes: MatchType[] } | null>(null)
   const [manualText, setManualText] = useState(restored.manualText)
   const [manualStatus, setManualStatus] = useState<DiscoverStatus>('idle')
@@ -78,9 +94,11 @@ function App() {
   const [manualPronunciationWarning, setManualPronunciationWarning] = useState('')
   const [manualPronunciationMissing, setManualPronunciationMissing] = useState<{ missingWords: number; missingQueries: string[] } | null>(null)
   const [manualComparisons, setManualComparisons] = useState(0)
-  const [manualPage, setManualPage] = useState(0)
+  const [manualPage, setManualPage] = useState(() => initialPage('matches'))
   const [ranQueries, setRanQueries] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set(restored.selected))
+  const [clearedSelection, setClearedSelection] = useState<Set<string> | null>(null)
+  const manualQueryRef = useRef<HTMLTextAreaElement>(null)
   // P4：批量加入云词本
   const [submitOpen, setSubmitOpen] = useState(false)
   const [target, setTarget] = useState<string>('create') // 'create' 或已有词本 id（'' 表示尚未选择）
@@ -105,6 +123,40 @@ function App() {
     const syncRoute = () => { setGuideOpen(window.location.hash === '#api-guide'); window.scrollTo({ top: 0 }) }
     window.addEventListener('hashchange', syncRoute)
     return () => window.removeEventListener('hashchange', syncRoute)
+  }, [])
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const values: Record<string, string> = {
+      view: mode === 'words' ? '' : mode,
+      page: page ? String(page + 1) : '',
+      filter,
+      pairs: pairPage ? String(pairPage + 1) : '',
+      matches: manualPage ? String(manualPage + 1) : '',
+      weak: weakFilter,
+      threshold: threshold === THRESHOLD_DEFAULT ? '' : String(threshold),
+      types: matchTypes.length === DEFAULT_MATCH_TYPES.length ? '' : matchTypes.join(','),
+    }
+    for (const [key, value] of Object.entries(values)) {
+      if (value) url.searchParams.set(key, value)
+      else url.searchParams.delete(key)
+    }
+    window.history.replaceState(null, '', url)
+  }, [mode, page, filter, pairPage, manualPage, weakFilter, threshold, matchTypes])
+  useEffect(() => {
+    const restoreView = () => {
+      const params = new URLSearchParams(window.location.search)
+      setMode((['words', 'discover', 'manual'] as const).find(value => value === params.get('view')) ?? 'words')
+      const readPage = (key: string) => { const value = Number(params.get(key)); return Number.isSafeInteger(value) && value > 0 ? value - 1 : 0 }
+      setPage(readPage('page')); setPairPage(readPage('pairs')); setManualPage(readPage('matches'))
+      setFilter(params.get('filter') ?? ''); setWeakFilter(params.get('weak') ?? '')
+      const value = Number(params.get('threshold'))
+      setThreshold(params.has('threshold') && Number.isFinite(value) && value >= 0 && value <= 1 ? value : THRESHOLD_DEFAULT)
+      const requested = params.get('types')?.split(',') ?? []
+      const selected = DEFAULT_MATCH_TYPES.filter(type => requested.includes(type))
+      setMatchTypes(selected.length ? selected : DEFAULT_MATCH_TYPES)
+    }
+    window.addEventListener('popstate', restoreView)
+    return () => window.removeEventListener('popstate', restoreView)
   }, [])
 
   // 自动发现与手动查找共用一个 Worker 与任务号；任一取消/重跑/断开都须丢弃旧任务。
@@ -155,7 +207,7 @@ function App() {
 
   async function authenticate(payload: { token?: string; useDevToken?: boolean }) {
     setBusy(true); setError('')
-    try { await api('connect', payload); setToken(''); setConnected(true); setData(null); setSelected(new Set()); clearPredictions(); resetSubmit() }
+    try { await api('connect', payload); setToken(''); setConnected(true); setData(null); setSelected(new Set()); setClearedSelection(null); clearPredictions(); resetSubmit() }
     catch (e) { setError((e as Error).message) }
     finally { setBusy(false) }
   }
@@ -169,7 +221,7 @@ function App() {
     setData(current => current ? { ...current, finished: false } : null)
     try {
       const next = await syncStudyRecords(snapshot => { setData(snapshot); setProgress({ label: `已同步 ${snapshot.rows.length.toLocaleString()} / ${snapshot.total.toLocaleString()}`, current: snapshot.rows.length, total: snapshot.total }) })
-      setData(next); setPage(0); setMeanings({}); setMeaningError('')
+      setData(next); setMeanings({}); setMeaningError('')
       reportMetric('sync_complete', { durationMs: Math.round(performance.now() - startedAt), rows: next.rows.length, total: next.total, finished: next.finished })
     } catch (e) {
       setError((e as Error).message + '。已取回的部分记录仍保留。')
@@ -178,7 +230,8 @@ function App() {
   }
 
   async function disconnect() {
-    try { await api('disconnect', {}) } finally { setConnected(false); setData(null); setMeanings({}); setCustomMeanings({}); setDrafts({}); setCandidateText(''); setError(''); setPage(0); setSelected(new Set()); setMode('words'); clearPredictions(); resetSubmit() }
+    if ((selected.size || Object.keys(drafts).length || candidateText.trim() || manualText.trim()) && !window.confirm('断开连接会清除当前选择和未保存的输入，确定断开吗？')) return
+    try { await api('disconnect', {}) } finally { setConnected(false); setData(null); setMeanings({}); setCustomMeanings({}); setDrafts({}); setCandidateText(''); setError(''); setPage(0); setSelected(new Set()); setClearedSelection(null); setMode('words'); clearPredictions(); resetSubmit() }
   }
 
   async function supplement() {
@@ -229,10 +282,11 @@ function App() {
     const startedAt = performance.now()
     workerRef.current?.terminate()
     const parsed = parseManualInput(manualText)
-    if (parsed.invalid.length) { setManualStatus('error'); setManualError(`无法识别的输入词：${parsed.invalid.join('、')}。请每行或用逗号分隔输入英文单词。`); setManualNotice(''); return }
-    if (!parsed.words.length) { setManualStatus('error'); setManualError('请输入至少一个英文查询词。'); setManualNotice(''); return }
-    if (parsed.words.length > MAX_MANUAL_QUERY) { setManualStatus('error'); setManualError(`去重后 ${parsed.words.length} 个查询词，超过本网站上限 ${MAX_MANUAL_QUERY} 个（这不是墨墨接口限制）；请减少查询词。`); setManualNotice(''); return }
-    if (!data || !data.rows.length) { setManualStatus('error'); setManualError('没有可比较的候选：请先同步学习记录。'); setManualNotice(''); return }
+    const fail = (message: string) => { setManualStatus('error'); setManualError(message); setManualNotice(''); manualQueryRef.current?.focus() }
+    if (parsed.invalid.length) { fail(`无法识别的输入词：${parsed.invalid.join('、')}。请每行或用逗号分隔输入英文单词。`); return }
+    if (!parsed.words.length) { fail('请输入至少一个英文查询词。'); return }
+    if (parsed.words.length > MAX_MANUAL_QUERY) { fail(`去重后 ${parsed.words.length} 个查询词，超过本网站上限 ${MAX_MANUAL_QUERY} 个（这不是墨墨接口限制）；请减少查询词。`); return }
+    if (!data || !data.rows.length) { fail('没有可比较的候选：请先同步学习记录。'); return }
     setManualStatus('running'); setManualError(''); setManualHits([]); setManualComparisons(0); setManualPronunciationWarning(''); setManualPronunciationMissing(null); setManualPage(0); setManualRunningText('正在准备…')
     setManualNotice(`已解析 ${parsed.words.length} 个查询词${parsed.duplicates ? `，忽略 ${parsed.duplicates} 个重复项` : ''}。`)
     setRanQueries(parsed.words)
@@ -240,7 +294,7 @@ function App() {
     const worker = spawnWorker((w, message) => {
       if (message.type === 'progress') setManualRunningText(`正在比较 ${message.done?.toLocaleString()} / ${message.total?.toLocaleString()} 对（候选 × 查询词）…`)
       else if (message.type === 'manualDone') { setManualHits(message.hits ?? []); setManualComparisons(message.comparisons ?? 0); setManualStatus('done'); setManualError(''); setManualPronunciationWarning(message.pronunciationError ?? ''); setManualPronunciationMissing(message.pronunciationCoverage ? { missingWords: message.pronunciationCoverage.missingWords, missingQueries: message.pronunciationCoverage.missingQueries ?? [] } : null); setManualPage(0); reportMetric('similarity_complete', { mode: 'manual', durationMs: Math.round(performance.now() - startedAt), results: message.hits?.length ?? 0 }); w.terminate(); workerRef.current = null }
-      else if (message.type === 'error') { setManualStatus('error'); setManualError(message.message ?? '相似度计算失败'); w.terminate(); workerRef.current = null }
+      else if (message.type === 'error') { fail(message.message ?? '相似度计算失败'); w.terminate(); workerRef.current = null }
     })
     worker.postMessage({ taskId: taskRef.current, kind: 'manual', queries: parsed.words.map((w, i) => ({ id: 'q' + i, spelling: w })), words: data.rows.map(r => ({ id: r.voc_id, spelling: r.voc_spelling })), matchTypes: matchTypesOverride, pronunciationThreshold: PRONUNCIATION_THRESHOLD, predictions: matchTypesOverride.includes('pronunciation') ? predictions : undefined })
   }
@@ -261,8 +315,10 @@ function App() {
 
   useEffect(() => () => workerRef.current?.terminate(), [])
 
-  function toggleWord(id: string) { setSelected(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next }) }
-  function togglePair(a: string, b: string) { setSelected(old => { const next = new Set(old); if (next.has(a) && next.has(b)) { next.delete(a); next.delete(b) } else { next.add(a); next.add(b) } return next }) }
+  function toggleWord(id: string) { setClearedSelection(null); setSelected(old => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next }) }
+  function togglePair(a: string, b: string) { setClearedSelection(null); setSelected(old => { const next = new Set(old); if (next.has(a) && next.has(b)) { next.delete(a); next.delete(b) } else { next.add(a); next.add(b) } return next }) }
+  function clearSelection() { setClearedSelection(new Set(selected)); setSelected(new Set()) }
+  function undoClearSelection() { if (clearedSelection) { setSelected(new Set(clearedSelection)); setClearedSelection(null) } }
 
   const wordById = useMemo(() => new Map((data?.rows ?? []).map(r => [r.voc_id, r])), [data])
   const keyOf = (spelling: string) => spelling.trim().toLowerCase()
@@ -270,6 +326,9 @@ function App() {
 
   // —— 词表浏览 ——
   const filtered = data?.rows.filter(r => r.voc_spelling.toLowerCase().includes(filter.trim().toLowerCase())) ?? []
+  useEffect(() => {
+    if (data && !busy) setPage(current => Math.min(current, Math.max(0, Math.ceil(filtered.length / PAGE_WORDS) - 1)))
+  }, [data, busy, filtered.length])
   const visible = filtered.slice(page * PAGE_WORDS, (page + 1) * PAGE_WORDS)
   const pagePairs = pairs.slice(pairPage * PAGE_RESULTS, (pairPage + 1) * PAGE_RESULTS)
   const pageHits = manualHits.slice(manualPage * PAGE_RESULTS, (manualPage + 1) * PAGE_RESULTS)
@@ -356,7 +415,10 @@ function App() {
     if (next && next !== 'create') void loadDetail(next)
   }
 
-  function openSubmitPanel() { setSubmitOpen(true); setSubmitState('idle'); setOutcomes(null); setSubmitError(''); setSubmitNotice(''); void loadNotepadList() }
+  function openSubmitPanel() {
+    if (!submitOpen) { setSubmitOpen(true); setSubmitState('idle'); setOutcomes(null); setSubmitError(''); setSubmitNotice(''); void loadNotepadList() }
+    requestAnimationFrame(() => document.getElementById('submit-panel')?.scrollIntoView({ block: 'start' }))
+  }
 
   // 新建响应丢失时按标题 + 创建时间窗 + 正文逐字比对，仅在唯一命中时认定创建成功。
   async function reconcileCreate(title: string, sinceMs: number, expectedContent: string): Promise<string> {
@@ -451,19 +513,19 @@ function App() {
     } catch (e) { setSubmitState('pending'); reportMetric('notepad_pending', { operation: 'recheck' }); setSubmitError((e as Error).message) }
   }
 
-  const selectedPanel = <aside className="selectedPanel" aria-label="已选清单"><h2>已选清单</h2><p>{selected.size === 0 ? '勾选词对或单个词后在此汇总。' : `已选 ${selected.size} 个词（按 ID 去重）。`}</p>{selected.size > 0 && <ul className="selectedList">{[...selected].map(id => { const row = wordById.get(id); const spelling = row?.voc_spelling ?? id; return <li key={id}><strong>{spelling}</strong><span>{displayMeaning(spelling) || '正在获取释义…'}</span><button className="ghost" onClick={() => toggleWord(id)} aria-label={`移除 ${spelling}`}>移除</button></li> })}</ul>}{selected.size > 0 && <button onClick={openSubmitPanel} disabled={busy || submitState === 'submitting'}>{submitOpen ? '查看提交面板' : '加入云词本'}</button>}{selected.size > 0 && <button className="ghost" onClick={() => setSelected(new Set())}>清空选择</button>}</aside>
+  const selectedPanel = <aside className="selectedPanel" aria-label="已选清单"><h2>已选清单</h2><p>{selected.size === 0 ? '勾选词对或单个词后在此汇总。' : `已选 ${selected.size} 个词（按 ID 去重）。`}</p><div className="selectedActions">{selected.size > 0 && <button onClick={openSubmitPanel} disabled={busy || submitState === 'submitting'}>{submitOpen ? '查看提交面板' : '加入云词本'}</button>}{selected.size > 0 && <button className="ghost" onClick={clearSelection}>清空选择</button>}{clearedSelection && <button className="ghost" onClick={undoClearSelection}>撤销清空 {clearedSelection.size} 词</button>}</div>{selected.size > 0 && <ul className="selectedList">{[...selected].map(id => { const row = wordById.get(id); const spelling = row?.voc_spelling ?? id; return <li key={id}><strong>{spelling}</strong><span>{displayMeaning(spelling) || '正在获取释义…'}</span><button className="ghost" onClick={() => toggleWord(id)} aria-label={`移除 ${spelling}`}>移除</button></li> })}</ul>}</aside>
 
-  const supplementPanel = data && !data.finished && <section className="supplement"><h3>导入墨墨词表补齐缺口</h3><p>选择墨墨导出的 PDF，或每行一个拼写的 UTF-8 文本。PDF 在浏览器本地解析，不会上传原文件；请根据解析报告检查标题、页码等无效行。</p><label className="fileLabel">选择 PDF 或文本词表 <input type="file" accept=".pdf,application/pdf,.txt,text/plain" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { const result = await extractCandidateFile(file); const parsed = parseCandidateList(result.text); setCandidateText(result.text); setCandidateNotice(`已读取${result.format === 'pdf' ? ` PDF ${result.pages} 页、` : '文本 '} ${parsed.total} 行：${parsed.words.length} 个有效词、${parsed.duplicates} 个重复项、${parsed.invalid.length} 个无效项。`) } catch (reason) { setError(`文件解析失败：${(reason as Error).message}`) } }}/></label>{candidateNotice && <p className="notice" role="status">{candidateNotice}</p>}<textarea aria-label="候选英文词表" value={candidateText} onChange={e => { setCandidateText(e.target.value); setCandidateNotice('') }} placeholder={'adapt\nadopt\na phrase'} rows={4}/><button disabled={busy || !candidateText.trim()} onClick={supplement}>校验并补齐</button></section>
+  const supplementPanel = data && !data.finished && <section className="supplement"><h3>导入墨墨词表补齐缺口</h3><p>选择墨墨导出的 PDF，或每行一个拼写的 UTF-8 文本。PDF 在浏览器本地解析，不会上传原文件；请根据解析报告检查标题、页码等无效行。</p><label className="fileLabel">选择 PDF 或文本词表 <input name="candidate-file" type="file" accept=".pdf,application/pdf,.txt,text/plain" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; try { const result = await extractCandidateFile(file); const parsed = parseCandidateList(result.text); setCandidateText(result.text); setCandidateNotice(`已读取${result.format === 'pdf' ? ` PDF ${result.pages} 页、` : '文本 '} ${parsed.total} 行：${parsed.words.length} 个有效词、${parsed.duplicates} 个重复项、${parsed.invalid.length} 个无效项。`) } catch (reason) { setError(`文件解析失败：${(reason as Error).message}`) } }}/></label>{candidateNotice && <p className="notice" role="status">{candidateNotice}</p>}<textarea name="candidate-list" autoComplete="off" spellCheck={false} aria-label="候选英文词表" value={candidateText} onChange={e => { setCandidateText(e.target.value); setCandidateNotice('') }} placeholder={'adapt\nadopt\na phrase…'} rows={4}/><button disabled={busy || !candidateText.trim()} onClick={supplement}>校验并补齐</button></section>
 
-  const submitPanel = submitOpen && <section className="submitPanel" aria-label="加入云词本">
+  const submitPanel = submitOpen && <section id="submit-panel" className="submitPanel" aria-label="加入云词本">
     <div className="submitHead"><div><span className="eyebrow">NOTEPAD SUBMIT</span><h2>加入云词本</h2></div><button className="ghost" onClick={() => setSubmitOpen(false)} disabled={submitState === 'submitting'}>关闭</button></div>
     <div className="submitTargets"><label><input type="radio" name="notepad-target" checked={target === 'create'} disabled={submitState === 'submitting'} onChange={() => chooseTarget('create')}/>新建词本</label><label><input type="radio" name="notepad-target" checked={target !== 'create'} disabled={submitState === 'submitting'} onChange={() => chooseTarget('')}/>追加到已有词本</label></div>
-    {target === 'create' ? <div className="submitFields"><label>标题<input value={newTitle} maxLength={100} disabled={submitState === 'submitting'} onChange={e => setNewTitle(e.target.value)} placeholder="易混淆词"/></label><label>简介<input value={newBrief} maxLength={500} disabled={submitState === 'submitting'} onChange={e => setNewBrief(e.target.value)}/></label><p className="hint">新建为未发布的章节模式专用词本（推荐）；中文释义只在本页对照展示，不写入词本正文。</p></div>
+    {target === 'create' ? <div className="submitFields"><label>标题<input name="notepad-title" autoComplete="off" value={newTitle} maxLength={100} disabled={submitState === 'submitting'} onChange={e => setNewTitle(e.target.value)} placeholder="易混淆词…"/></label><label>简介<input name="notepad-brief" autoComplete="off" value={newBrief} maxLength={500} disabled={submitState === 'submitting'} onChange={e => setNewBrief(e.target.value)}/></label><p className="hint">新建为未发布的章节模式专用词本（推荐）；中文释义只在本页对照展示，不写入词本正文。</p></div>
       : <div className="submitFields">
         {notepadListError ? <p className="error">词本列表加载失败：{notepadListError} <button className="ghost" onClick={loadNotepadList}>重试</button></p>
           : !notepadList ? <p className="notice" role="status">正在读取词本列表…（首版最多前 100 个普通词本）</p>
           : notepadList.length === 0 ? <p className="empty">没有可写的普通云词本（收藏与已删除类型不在列表内）。</p>
-          : <label>选择已有词本 <select value={target} disabled={submitState === 'submitting'} onChange={e => chooseTarget(e.target.value)}><option value="">请选择…</option>{notepadList.map(n => <option key={n.id} value={n.id}>{n.title || '（无标题）'}</option>)}</select></label>}
+           : <label>选择已有词本 <select name="notepad-existing" value={target} disabled={submitState === 'submitting'} onChange={e => chooseTarget(e.target.value)}><option value="">请选择…</option>{notepadList.map(n => <option key={n.id} value={n.id}>{n.title || '（无标题）'}</option>)}</select></label>}
         {detailError && <p className="error">词本详情加载失败：{detailError} <button className="ghost" onClick={() => target && loadDetail(target)}>重试</button></p>}
         {detail && <p className="scopeLine">「{detail.title}」· {detail.content?.trim() ? detectMode(detail.content) === 'chapter' ? '章节模式' : '文本模式' : '空正文'} · 已收录 {new Set([...parsedWords(detail.list), ...contentWords(detail.content)]).size} 词 · 状态 {detail.status ?? '未知'}。追加将保留原标题、简介、标签、发布状态与既有正文。</p>}
       </div>}
@@ -488,17 +550,18 @@ function App() {
   </section>
 
   return <div className="shell">
+    <a className="skipLink" href="#main-content">跳转到主要内容</a>
     <header className="top"><div><span className="eyebrow">MEMO / WORD STUDY</span><h1>{guideOpen ? 'API 获取指南' : '易混淆词'}</h1></div><div className="topActions">{guideOpen ? <a className="navLink" href="#">返回工具</a> : <><a className="navLink" href="#api-guide">如何获取 API</a><span className={'status ' + (connected ? 'online' : '')}>{connected ? '已连接' : '未连接'}</span>{connected && <button className="ghost" onClick={disconnect}>断开连接</button>}</>}</div></header>
-    {guideOpen ? <ApiGuide/> : !connected ? <main className="connectPanel"><h2>连接墨墨账号</h2><p>Token 只保存在服务端短期会话中。连接后先验证学习记录读取权限。还没有 Token？<a href="#api-guide">查看获取教程</a>。</p><form onSubmit={connect}><label htmlFor="token">OpenAPI Token</label><input id="token" type="password" autoComplete="off" required value={token} onChange={e => setToken(e.target.value)} placeholder="粘贴 Token"/><button disabled={busy}>{busy ? '正在验证…' : '连接并验证'}</button></form>{import.meta.env.DEV && <button type="button" className="ghost" disabled={busy} onClick={() => void authenticate({ useDevToken: true })}>使用本机 .dev.vars 开发 Token 连接</button>}{error && <p className="error" role="alert">{error}</p>}</main> : <main>
+    {guideOpen ? <ApiGuide/> : !connected ? <main id="main-content" className="connectPanel"><h2>连接墨墨账号</h2><p>Token 只保存在服务端短期会话中。连接后先验证学习记录读取权限。还没有 Token？<a href="#api-guide">查看获取教程</a>。</p><form onSubmit={connect}><label htmlFor="token">OpenAPI Token</label><input id="token" name="token" type="password" autoComplete="off" spellCheck={false} required value={token} onChange={e => setToken(e.target.value)} placeholder="粘贴 Token…"/><button disabled={busy}>{busy ? '正在验证…' : '连接并验证'}</button></form>{import.meta.env.DEV && <button type="button" className="ghost" disabled={busy} onClick={() => void authenticate({ useDevToken: true })}>使用本机开发 Token 连接</button>}{error && <p className="error" role="alert">{error}</p>}</main> : <main id="main-content">
       <section className="toolbar"><div><span className="eyebrow">DATA COVERAGE</span><h2>已加入单词</h2></div><button onClick={refresh} disabled={busy}>{busy ? '正在同步…' : data ? '手动刷新' : '开始同步'}</button></section>
       {busy && progress && <SyncProgress state={progress}/>} {error && <p className="error" role="alert">{error}</p>}
       {data ? <><section className="metrics" aria-label="同步范围"><div><span>已同步</span><strong>{data.rows.length.toLocaleString()}</strong></div><div><span>接口总量</span><strong>{data.total.toLocaleString()}</strong></div><div><span>覆盖状态</span><strong>{data.finished ? '本次已核对' : '部分范围'}</strong></div><div><span>上次同步</span><strong className="date">{new Date(data.syncedAt).toLocaleString('zh-CN')}</strong></div></section>
         {!data.finished && <p className="warning">还有 {Math.max(0, data.total - data.rows.length).toLocaleString()} 条未同步。</p>}
         <nav className="tabs" aria-label="视图模式"><button className={'tab' + (mode === 'words' ? ' active' : '')} aria-pressed={mode === 'words'} onClick={() => setMode('words')}>已同步词表</button><button className={'tab' + (mode === 'discover' ? ' active' : '')} aria-pressed={mode === 'discover'} onClick={() => setMode('discover')}>自动发现</button><button className={'tab' + (mode === 'manual' ? ' active' : '')} aria-pressed={mode === 'manual'} onClick={() => setMode('manual')}>手动查找</button></nav>
         {submitPanel}
-        {mode !== 'words' && <details className="notice"><summary>补充预测读音{predictions ? `（已载入 ${Object.keys(predictions.entries).length} 个）` : ''}</summary><p>导入本机生成的读音文件，仅在当前页面使用，不上传；刷新页面或断开账号后需重新导入。预测可能有误，词典读音优先。</p><label>导入预测读音 <input type="file" accept=".json,application/json" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void importPredictions(file) }}/></label>{predictions && <button className="ghost" onClick={clearPredictions}>移除预测读音</button>}{predictionNotice && <p role="status">{predictionNotice}</p>}{predictionError && <p className="error" role="alert">{predictionError}</p>}</details>}
+        {mode !== 'words' && <details className="notice"><summary>补充预测读音{predictions ? `（已载入 ${Object.keys(predictions.entries).length} 个）` : ''}</summary><p>导入本机生成的读音文件，仅在当前页面使用，不上传；刷新页面或断开账号后需重新导入。预测可能有误，词典读音优先。</p><label>导入预测读音 <input name="prediction-file" type="file" accept=".json,application/json" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void importPredictions(file) }}/></label>{predictions && <button className="ghost" onClick={clearPredictions}>移除预测读音</button>}{predictionNotice && <p role="status">{predictionNotice}</p>}{predictionError && <p className="error" role="alert">{predictionError}</p>}</details>}
         {mode === 'discover' ? <div className="workspace"><section className="records discover"><div className="recordsHead"><div><span className="eyebrow">AUTO DISCOVERY</span><h2>薄弱词自动发现</h2></div></div>
-          <div className="controls"><MatchTypeSelector value={matchTypes} message={matchTypeMessage} onChange={toggleMatchType}/><label className="thresholdControl">相似度阈值 <span className="thresholdSlider"><input type="range" min={0} max={1} step={THRESHOLD_STEP} value={threshold} disabled={status === 'running' || !matchTypes.some(type => type === 'spelling' || type === 'pronunciation')} aria-valuetext={threshold.toFixed(2)} onChange={e => setThreshold(Number(e.target.value))}/><output>{threshold.toFixed(2)}</output></span><span className="hint">用于拼写与发音路径；词块换序不受阈值限制。</span></label><label>缩小薄弱词范围 <input value={weakFilter} disabled={status === 'running'} onChange={e => setWeakFilter(e.target.value)} placeholder="可选：按拼写筛选"/></label><div className="controlActions">{status === 'running' ? <button className="ghost" onClick={cancelDiscovery}>取消</button> : <button onClick={() => runDiscovery()} disabled={busy}>{status === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
+          <div className="controls"><MatchTypeSelector value={matchTypes} message={matchTypeMessage} onChange={toggleMatchType}/><label className="thresholdControl">相似度阈值 <span className="thresholdSlider"><input name="threshold" type="range" min={0} max={1} step={THRESHOLD_STEP} value={threshold} disabled={status === 'running' || !matchTypes.some(type => type === 'spelling' || type === 'pronunciation')} aria-valuetext={threshold.toFixed(2)} onChange={e => setThreshold(Number(e.target.value))}/><output>{threshold.toFixed(2)}</output></span><span className="hint">用于拼写与发音路径；词块换序不受阈值限制。</span></label><label>缩小薄弱词范围 <input name="weak-filter" autoComplete="off" spellCheck={false} value={weakFilter} disabled={status === 'running'} onChange={e => setWeakFilter(e.target.value)} placeholder="例如：adapt…"/></label><div className="controlActions">{status === 'running' ? <button className="ghost" onClick={cancelDiscovery}>取消</button> : <button onClick={() => runDiscovery()} disabled={busy}>{status === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
           <p className="scopeLine">薄弱词（忘记/模糊）<strong>{weakRows.length}</strong> 个 · 反馈未知 <strong>{unknownCount}</strong> 个单独呈现，不参与自动发现。{!data.finished && ' 当前为部分同步范围，可能漏检未同步的词对。'}</p>
           {status === 'running' && <p className="notice" role="status">{runningText}</p>}
           {status === 'error' && <p className="error" role="alert">{discoverError}</p>}
@@ -519,10 +582,10 @@ function App() {
         </section>
           {selectedPanel}
         </div> : mode === 'manual' ? <div className="workspace"><section className="records discover manual"><div className="recordsHead"><div><span className="eyebrow">MANUAL LOOKUP</span><h2>手动查找相似词</h2></div></div>
-          <div className="controls manualControls"><MatchTypeSelector value={matchTypes} message={matchTypeMessage} onChange={toggleMatchType}/><label className="manualQueryLabel">查询英文词（换行、英文逗号或中文逗号分隔，最多 {MAX_MANUAL_QUERY} 个）<textarea aria-label="查询英文词" value={manualText} disabled={manualStatus === 'running'} rows={3} placeholder={'adapt\nadopt，a band'} onChange={e => setManualText(e.target.value)}/><span className="hint">手动发音匹配阈值为 {PRONUNCIATION_THRESHOLD.toFixed(2)}。</span></label><div className="controlActions">{manualStatus === 'running' ? <button className="ghost" onClick={cancelManual}>取消</button> : <button onClick={() => runManual()} disabled={busy}>{manualStatus === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
+          <div className="controls manualControls"><MatchTypeSelector value={matchTypes} message={matchTypeMessage} onChange={toggleMatchType}/><label className="manualQueryLabel">查询英文词（换行、英文逗号或中文逗号分隔，最多 {MAX_MANUAL_QUERY} 个）<textarea ref={manualQueryRef} name="manual-query" autoComplete="off" spellCheck={false} aria-label="查询英文词" aria-invalid={manualStatus === 'error'} aria-describedby={manualStatus === 'error' ? 'manual-error' : undefined} value={manualText} disabled={manualStatus === 'running'} rows={3} placeholder={'adapt\nadopt，a band…'} onChange={e => setManualText(e.target.value)}/><span className="hint">手动发音匹配阈值为 {PRONUNCIATION_THRESHOLD.toFixed(2)}。</span></label><div className="controlActions">{manualStatus === 'running' ? <button className="ghost" onClick={cancelManual}>取消</button> : <button onClick={() => runManual()} disabled={busy}>{manualStatus === 'done' ? '重新查找' : '开始查找'}</button>}</div></div>
           <p className="scopeLine">候选范围：已同步的 <strong>{data.rows.length}</strong> 个已加入单词。换序优先；包含相似时保留原有拼写顺序，仅发音命中项追加在后。</p>
           {manualStatus === 'running' && <p className="notice" role="status">{manualRunningText}</p>}
-          {manualStatus === 'error' && <p className="error" role="alert">{manualError}</p>}
+          {manualStatus === 'error' && <p id="manual-error" className="error" role="alert">{manualError}</p>}
           {manualPronunciationWarning && <p className="warning" role="status">部分发音数据不可用：{manualPronunciationWarning}。其他已选类型的结果仍保留。</p>}
           {manualPronunciationMissing && (manualPronunciationMissing.missingWords > 0 || manualPronunciationMissing.missingQueries.length > 0) && <p className="notice" role="status">{manualPronunciationMissing.missingQueries.length > 0 ? `查询词 ${manualPronunciationMissing.missingQueries.join('、')} 暂无可用读音；` : ''}候选范围有 {manualPronunciationMissing.missingWords} 个词暂无可用读音。缺失读音不按零分参与判断；尚未支持实时预测新词。</p>}
           {manualNotice && manualStatus !== 'error' && manualStatus !== 'running' && <p className="notice">{manualNotice}</p>}
@@ -536,7 +599,7 @@ function App() {
           {manualStatus !== 'done' && manualStatus !== 'running' && <div className="empty large">输入一个或多个英文词，按所选类型分别查找；每个候选只显示一次并标注全部命中类型，与自动发现共用选择状态。</div>}
         </section>
           {selectedPanel}
-        </div> : <section className="records"><div className="recordsHead"><div><span className="eyebrow">STUDY RECORDS</span><h2>词语与释义</h2></div><label>查找已同步词 <input value={filter} onChange={e => { setFilter(e.target.value); setPage(0) }} placeholder="输入英文拼写"/></label></div>
+        </div> : <section className="records"><div className="recordsHead"><div><span className="eyebrow">STUDY RECORDS</span><h2>词语与释义</h2></div><label>查找已同步词 <input name="word-filter" autoComplete="off" spellCheck={false} value={filter} onChange={e => { setFilter(e.target.value); setPage(0) }} placeholder="例如：adapt…"/></label></div>
           {supplementPanel}
           {meaningError && <p className="error" role="alert">词典查询失败：{meaningError} <button className="ghost" onClick={() => setMeaningRetry(n => n + 1)}>重试释义</button></p>}
           {filtered.length === 0 ? <p className="empty">{data.rows.length ? '已同步范围内没有匹配的单词。' : '当前账号没有可展示的学习记录。'}</p> : meaningError ? null : !ready ? <p className="empty" role="status">正在准备本页中英对照…</p> : <ul className="wordList">{visible.map(row => { const key = keyOf(row.voc_spelling); const meaning = customMeanings[key] ?? meanings[key]; return <li key={row.voc_id}><div className="word"><strong>{row.voc_spelling}</strong>{meaning ? <span>{meaning}</span> : <MeaningForm inputId={'meaning-' + row.voc_id} label="中文释义缺失，补充后才可提交" value={drafts[key] ?? ''} onChange={v => setDrafts(old => ({ ...old, [key]: v }))} onCommit={v => setCustomMeanings(old => ({ ...old, [key]: v }))}/> }</div><div className="meta"><span>{responseLabel(row)}</span><span>{typeof row.study_count === 'number' ? `学习 ${row.study_count} 次` : '次数未知'}</span></div></li> })}</ul>}
@@ -544,6 +607,7 @@ function App() {
         </section>}
       </> : <div className="empty large">连接已验证。点击“开始同步”读取学习记录。</div>}
     </main>}
+    {connected && data && mode !== 'words' && (selected.size > 0 || clearedSelection) && <div className="mobileSelectionBar" role="group" aria-label="已选词操作"><span>{selected.size ? `已选 ${selected.size} 词` : `已清空 ${clearedSelection?.size ?? 0} 词`}</span>{selected.size ? <button onClick={openSubmitPanel} disabled={busy || submitState === 'submitting'}>{submitOpen ? '查看提交面板' : '加入云词本'}</button> : <button onClick={undoClearSelection}>撤销清空</button>}</div>}
     <footer>数据来自墨墨 OpenAPI · 中文释义来自 ECDICT（<a href="/ECDICT-LICENSE.txt">许可与署名</a>）· 断开连接后清除会话</footer>
   </div>
 }

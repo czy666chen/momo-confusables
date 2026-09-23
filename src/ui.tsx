@@ -7,7 +7,7 @@ const HAN = /[\u3400-\u9fff]/u
 const MEANING_MAX = 500
 
 export function PairCheck(props: { checked: boolean; indeterminate: boolean; onChange: () => void; label: string }) {
-  return <input type="checkbox" checked={props.checked} aria-label={props.label} onChange={props.onChange} ref={el => { if (el) el.indeterminate = props.indeterminate }} />
+  return <input type="checkbox" name="pair-selection" checked={props.checked} aria-label={props.label} onChange={props.onChange} ref={el => { if (el) el.indeterminate = props.indeterminate }} />
 }
 
 const MATCH_TYPE_LABELS: Record<MatchType, string> = { spelling: '相似', reorder: '换序', pronunciation: '发音' }
@@ -15,7 +15,7 @@ const MATCH_TYPE_LABELS: Record<MatchType, string> = { spelling: '相似', reord
 export function MatchTypeSelector({ value, message, onChange }: { value: MatchType[]; message: string; onChange: (type: MatchType) => void }) {
   return <fieldset className="matchTypes" aria-describedby="match-types-hint match-types-message">
     <legend>匹配类型</legend>
-    <div>{MATCH_TYPES.map(type => <label key={type}><input type="checkbox" checked={value.includes(type)} onChange={() => onChange(type)}/>{MATCH_TYPE_LABELS[type]}</label>)}</div>
+    <div>{MATCH_TYPES.map(type => <label key={type}><input type="checkbox" name={`match-${type}`} checked={value.includes(type)} onChange={() => onChange(type)}/>{MATCH_TYPE_LABELS[type]}</label>)}</div>
     <span id="match-types-hint" className="hint">至少选择一项；多个类型按“满足任意一项”合并。</span>
     <span id="match-types-message" className={message ? 'matchTypeMessage visible' : 'matchTypeMessage'} role="status" aria-live="polite">{message}</span>
   </fieldset>
@@ -48,7 +48,7 @@ export function MeaningForm({ inputId, label, value, onChange, onCommit }: { inp
   const valid = trimmed.length > 0 && trimmed.length <= MEANING_MAX && HAN.test(trimmed)
   return <form className="meaningForm" onSubmit={event => { event.preventDefault(); if (valid) onCommit(trimmed) }}>
     <label htmlFor={inputId}>{label}</label>
-    <div><input id={inputId} value={value} maxLength={MEANING_MAX} onChange={event => onChange(event.target.value)} placeholder="输入含汉字的中文释义"/><button disabled={!valid}>保存</button></div>
+    <div><input id={inputId} name="chinese-meaning" autoComplete="off" value={value} maxLength={MEANING_MAX} onChange={event => onChange(event.target.value)} placeholder="例如：适应…"/><button disabled={!valid}>保存</button></div>
   </form>
 }
 
@@ -63,7 +63,7 @@ export function Pager({ page, total, size, summary, onPage, always }: { page: nu
     if (Number.isFinite(next)) onPage(next - 1)
   }
   if (!always && total <= size) return null
-  return <div className="pager"><div className="pagerInfo"><form className="pagerJump" onSubmit={event => { event.preventDefault(); commitPage() }}><span>第</span><input aria-label="页码" inputMode="numeric" value={pageInput} onChange={event => { if (/^\d*$/.test(event.target.value)) setPageInput(event.target.value) }} onBlur={commitPage} onFocus={event => event.currentTarget.select()}/><span>/ {totalPages} 页</span></form><span>· {summary}</span></div><div className="pagerActions"><button className="ghost" disabled={page === 0} onClick={() => onPage(page - 1)}>上一页</button><button className="ghost" disabled={(page + 1) * size >= total} onClick={() => onPage(page + 1)}>下一页</button></div></div>
+  return <div className="pager"><div className="pagerInfo"><form className="pagerJump" onSubmit={event => { event.preventDefault(); commitPage() }}><span>第</span><input name="page-number" autoComplete="off" aria-label="页码" inputMode="numeric" value={pageInput} onChange={event => { if (/^\d*$/.test(event.target.value)) setPageInput(event.target.value) }} onBlur={commitPage} onFocus={event => event.currentTarget.select()}/><span>/ {totalPages} 页</span></form><span>· {summary}</span></div><div className="pagerActions"><button className="ghost" disabled={page === 0} onClick={() => onPage(page - 1)}>上一页</button><button className="ghost" disabled={(page + 1) * size >= total} onClick={() => onPage(page + 1)}>下一页</button></div></div>
 }
 
 export type ProgressState = { label: string; current?: number; total?: number }
@@ -74,7 +74,7 @@ export function SyncProgress({ state }: { state: ProgressState }) {
 }
 
 export function ApiGuide() {
-  return <main className="apiGuide">
+  return <main id="main-content" className="apiGuide">
     <section className="guideIntro"><div><h2>获取墨墨 API Token</h2><p>整个过程通常只需一分钟。你需要在墨墨背单词中取得个人请求凭证，再回到本站完成连接。</p></div><aside><strong>先确认</strong><span>已登录自己的墨墨账号，并将 App 更新到可看到“开放 API”的版本。</span></aside></section>
     <ol className="guideSteps">
       <li><div><h3>打开墨墨背单词</h3><p>进入底部的“我的”，打开“更多设置”。</p><div className="pathLine" aria-label="操作路径"><span>我的</span><i>→</i><span>更多设置</span></div></div></li>

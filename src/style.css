@@ -63,8 +63,11 @@ button:disabled { opacity: .55; cursor: not-allowed }
 .ghost { color: var(--ghost-fg); background: transparent; border-color: var(--ghost-border) }
 .ghost:hover:not(:disabled) { background: var(--ghost-hover) }
 input { width: 100%; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--panel-input); color: inherit; padding: 11px 12px }
-input[type=checkbox] { width: auto; margin: 0; accent-color: var(--primary); padding: 0 }
-input:focus, button:focus-visible, textarea:focus, a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px }
+input[type=checkbox], input[type=radio] { width: auto; flex: none; margin: 0; accent-color: var(--primary); padding: 0 }
+:is(input, button, textarea, select, a, summary):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px }
+textarea[aria-invalid=true] { border-color: var(--error-fg) }
+.skipLink { position: absolute; top: -100px; left: 16px; z-index: 30; padding: 10px 14px; border-radius: var(--radius-control); background: var(--panel); color: var(--fg) }
+.skipLink:focus-visible { top: 8px }
 
 /* 面板公共外观：原先 metrics/records/connectPanel 等各自重复声明同一组 背景+边框+圆角 */
 .metrics, .records, .connectPanel, .supplement, .selectedPanel, .submitPanel, .guideSteps, .guideHelp { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-panel) }
@@ -75,7 +78,7 @@ input:focus, button:focus-visible, textarea:focus, a:focus-visible { outline: 3p
 .shell > main, .shell > footer { min-width: 0 }
 .top { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 36px 0 31px; border-bottom: 1px solid var(--border) }
 .eyebrow { font-size: 11px; letter-spacing: .15em; font-weight: 800; color: var(--eyebrow) }
-.top h1 { font-size: 32px; letter-spacing: -.045em; margin: 5px 0 3px }
+.top h1 { font-size: 32px; letter-spacing: -.045em; margin: 5px 0 3px; text-wrap: balance }
 .top p, .toolbar p { margin: 0; color: var(--text-muted); font-size: 14px }
 .topActions { display: flex; align-items: center; gap: 13px }
 .navLink, .primaryLink { display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-control); font-weight: 650; text-decoration: none }
@@ -96,7 +99,7 @@ input:focus, button:focus-visible, textarea:focus, a:focus-visible { outline: 3p
 
 .apiGuide { padding: 46px 0 54px }
 .guideIntro { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(240px, .8fr); gap: 56px; align-items: end; margin-bottom: 34px }
-.guideIntro h2 { margin: 7px 0 13px; max-width: 680px; font-size: clamp(32px, 5vw, 54px); line-height: 1.02; letter-spacing: -.055em }
+.guideIntro h2 { margin: 7px 0 13px; max-width: 680px; font-size: clamp(32px, 5vw, 54px); line-height: 1.02; letter-spacing: -.055em; text-wrap: balance }
 .guideIntro p { max-width: 650px; margin: 0; color: var(--text-soft); font-size: 16px; line-height: 1.75 }
 .guideIntro aside { display: grid; gap: 7px; border-left: 3px solid var(--primary); padding: 4px 0 4px 18px }
 .guideIntro aside strong { font-size: 14px }
@@ -187,16 +190,16 @@ footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 
 .workspace { display: flex; gap: 22px; align-items: flex-start }
 .workspace .records.discover { flex: 1; min-width: 0 }
 .records.discover .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; padding: 20px 24px; border-bottom: 1px solid var(--divider) }
-.records.discover .controls label { display: grid; gap: 6px; min-width: 180px }
-.records.discover .controls .thresholdControl { min-width: 260px }
-.matchTypes { min-width: 250px; margin: 0; padding: 0; border: 0 }
+.records.discover .controls label { display: grid; gap: 6px; min-width: min(180px, 100%) }
+.records.discover .controls .thresholdControl { min-width: min(260px, 100%) }
+.matchTypes { min-width: min(250px, 100%); margin: 0; padding: 0; border: 0 }
 .matchTypes legend { margin-bottom: 7px; color: var(--label); font-size: 13px; font-weight: 700 }
 .matchTypes > div { display: flex; gap: 14px; flex-wrap: wrap }
 .records.discover .controls .matchTypes label { display: flex; min-width: 0; grid-template-columns: none; align-items: center; gap: 6px; color: var(--fg); font-size: 14px; font-weight: 500 }
 .matchTypeMessage { display: block; min-height: 18px; margin-top: 4px; color: transparent; font-size: 12px }
 .matchTypeMessage.visible { color: var(--error-fg) }
 .thresholdSlider { display: flex; align-items: center; gap: 12px }
-.records.discover .controls input[type=range] { width: 190px; height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--primary); cursor: pointer }
+.records.discover .controls input[type=range] { width: 190px; min-width: 0; flex: 1 1 auto; height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--primary); cursor: pointer }
 .records.discover .controls input[type=range]:disabled { cursor: not-allowed }
 .thresholdSlider output { min-width: 46px; color: var(--fg); font-variant-numeric: tabular-nums; text-align: right }
 .controlActions { display: flex; gap: 8px; align-items: flex-end }
@@ -221,16 +224,18 @@ footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 
 .pairMeaning { grid-column: 1 / -1; color: var(--text-soft); font-size: 14px; line-height: 1.55 }
 .pairMeta { grid-column: 1 / -1; color: var(--text-meta); font-size: 12px }
 
-.selectedPanel { width: 300px; flex-shrink: 0; padding: 20px 18px; position: sticky; top: 20px }
+.selectedPanel { width: 300px; flex-shrink: 0; padding: 20px 18px; position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto }
 .selectedPanel h2 { margin: 0 0 8px; font-size: 17px }
 .selectedPanel > p { margin: 0 0 12px; font-size: 12px; color: var(--text-muted); line-height: 1.6 }
+.selectedActions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px }
+.selectedActions button { padding: 8px 10px; font-size: 12px }
 .selectedList { margin: 0 0 12px }
 .selectedList li { display: grid; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--divider) }
 .selectedList strong { font-size: 14px }
 .selectedList span { font-size: 12px; color: var(--text-soft); line-height: 1.5 }
 .selectedList button { justify-self: start; padding: 4px 8px; font-size: 11px }
 
-.records.manual .manualQueryLabel { flex: 1; min-width: 280px }
+.records.manual .manualQueryLabel { flex: 1; min-width: min(280px, 100%) }
 .records.manual textarea { display: block; width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--panel-input); color: inherit; font: inherit }
 .manualList li { display: grid; gap: 5px; padding: 15px 24px; border-bottom: 1px solid var(--divider) }
 .hitMain { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
@@ -266,6 +271,10 @@ footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 
 .submitOutcomes strong { font-size: 14px; overflow-wrap: anywhere }
 .submitOutcomes em { font-style: normal; margin-left: auto; font-size: 12px; color: var(--text-meta); white-space: nowrap }
 .submitActions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
+.mobileSelectionBar { display: none }
+@media (prefers-reduced-motion: reduce) {
+  .syncProgress progress::-webkit-progress-value { transition: none }
+}
 
 @media (max-width: 760px) {
   button, .navLink, .primaryLink { min-height: 44px }
@@ -304,8 +313,10 @@ footer { margin-top: auto; padding: 22px 0; color: var(--text-meta); font-size: 
   .submitPreview span { min-width: 0; flex-basis: 100% }
   .submitPreview em { margin-left: auto }
   .submitTargets { flex-direction: column; gap: 10px }
+  .mobileSelectionBar { position: fixed; inset: auto 0 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: var(--panel); border-top: 1px solid var(--border); box-shadow: 0 -8px 24px color-mix(in srgb, var(--fg) 8%, transparent); font-size: 14px; font-weight: 700 }
+  .mobileSelectionBar + footer { margin-bottom: calc(64px + env(safe-area-inset-bottom)) }
 }
 @media (max-width: 860px) {
   .workspace { flex-direction: column }
-  .selectedPanel { width: auto; position: static }
+  .selectedPanel { width: auto; position: static; max-height: none; overflow: visible }
 }

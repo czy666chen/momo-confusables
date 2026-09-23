@@ -85,3 +85,45 @@ test('API 获取指南可键盘导航且返回工具', async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
   expect(await page.getByRole('button', { name: '连接并验证' }).evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
 })
+
+test('窄屏布局、选词操作、错误焦点和视图链接可用', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    const body = route.request().postDataJSON?.() ?? {}
+    if (path === '/api/session') return route.fulfill({ json: { connected: true } })
+    if (path === '/api/metrics') return route.fulfill({ status: 202, json: { accepted: true } })
+    if (path === '/api/meanings') return route.fulfill({ json: { meanings: { adapt: '适应', adopt: '采用' } } })
+    if (path === '/api/query' && body.operation === 'study') {
+      if (body.payload?.as_count) return route.fulfill({ json: { data: { count: 2 } } })
+      return route.fulfill({ json: { data: { records: [
+        { voc_id: '1', voc_spelling: 'adapt', last_response: 'VAGUE', study_count: 2 },
+        { voc_id: '2', voc_spelling: 'adopt', last_response: 'FORGET', study_count: 3 },
+      ] } } })
+    }
+    if (path === '/api/query' && body.operation === 'notepads') return route.fulfill({ json: { data: { notepads: [{ id: 'np-test', title: '测试词本' }] } } })
+    return route.fulfill({ status: 404, json: { error: 'mock route missing' } })
+  })
+  await page.goto('/')
+  await expect(page.locator('.skipLink')).toHaveAttribute('href', '#main-content')
+  await page.getByRole('button', { name: '开始同步' }).click()
+  await expect(page.getByText('本次已核对')).toBeVisible()
+  await page.getByRole('button', { name: '自动发现' }).click()
+  await expect(page).toHaveURL(/view=discover/)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320)
+  await page.getByRole('button', { name: '开始查找' }).click()
+  await page.getByRole('checkbox', { name: /选择词对/ }).first().check()
+  await expect(page.locator('.mobileSelectionBar')).toBeVisible()
+  await page.getByRole('button', { name: '清空选择' }).click()
+  await page.locator('.mobileSelectionBar').getByRole('button', { name: '撤销清空' }).click()
+  await expect(page.locator('.selectedList li')).toHaveCount(2)
+  await page.locator('.mobileSelectionBar').getByRole('button', { name: '加入云词本' }).click()
+  await page.getByLabel('追加到已有词本').click()
+  await expect(page.getByLabel('选择已有词本')).toBeVisible()
+  const radioWidth = await page.getByRole('radio', { name: '追加到已有词本' }).evaluate(element => element.getBoundingClientRect().width)
+  expect(radioWidth).toBeLessThan(24)
+  await page.getByRole('button', { name: '手动查找' }).click()
+  await page.getByRole('button', { name: '开始查找' }).click()
+  await expect(page.getByRole('textbox', { name: '查询英文词' })).toBeFocused()
+  await expect(page.getByRole('textbox', { name: '查询英文词' })).toHaveAttribute('aria-invalid', 'true')
+})
